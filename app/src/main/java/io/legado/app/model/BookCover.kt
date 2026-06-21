@@ -6,7 +6,6 @@ import android.graphics.Bitmap
 import android.graphics.drawable.BitmapDrawable
 import android.graphics.drawable.Drawable
 import androidx.annotation.Keep
-import com.bumptech.glide.Glide
 import com.bumptech.glide.RequestBuilder
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.Transformation
@@ -38,7 +37,6 @@ import io.legado.app.utils.getPrefBoolean
 import io.legado.app.utils.getPrefString
 import kotlinx.coroutines.currentCoroutineContext
 import splitties.init.appCtx
-import java.io.File
 
 @Keep
 @Suppress("ConstPropertyName")
@@ -150,8 +148,7 @@ object BookCover {
         return ImageLoader.load(context, path)
             .apply(options)
             .override(context.resources.displayMetrics.widthPixels, SIZE_ORIGINAL)
-            .diskCacheStrategy(DiskCacheStrategy.ALL)
-            .skipMemoryCache(true).let {
+            .diskCacheStrategy(DiskCacheStrategy.ALL).let {
                 if (transformation != null) {
                     it.transform(transformation)
                 } else {
@@ -165,16 +162,24 @@ object BookCover {
         path: String?,
         loadOnlyWifi: Boolean = false,
         sourceOrigin: String? = null,
-    ): RequestBuilder<File?> {
+        transformation: Transformation<Bitmap>? = null,
+    ): RequestBuilder<Drawable> {
         var options = RequestOptions().set(OkHttpModelLoader.loadOnlyWifiOption, loadOnlyWifi)
             .set(OkHttpModelLoader.mangaOption, true)
         if (sourceOrigin != null) {
             options = options.set(OkHttpModelLoader.sourceOriginOption, sourceOrigin)
         }
-        return Glide.with(context)
-            .downloadOnly()
+        return ImageLoader.load(context, path)
             .apply(options)
-            .load(path)
+            .override(context.resources.displayMetrics.widthPixels, SIZE_ORIGINAL)
+            .diskCacheStrategy(DiskCacheStrategy.ALL)
+            .let {
+                if (transformation != null) {
+                    it.transform(transformation)
+                } else {
+                    it
+                }
+            }
     }
 
     /**

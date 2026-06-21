@@ -3,6 +3,7 @@ package io.legado.app.ui.book.manga.recyclerview
 import android.content.Context
 import android.graphics.ColorMatrix
 import android.graphics.ColorMatrixColorFilter
+import android.graphics.drawable.Drawable
 import android.util.SparseArray
 import android.view.LayoutInflater
 import android.view.ViewGroup
@@ -232,12 +233,13 @@ class MangaAdapter(private val context: Context) :
         return getItems().subList(position, position + 1)
     }
 
-    override fun getPreloadRequestBuilder(item: Any): RequestBuilder<*>? {
+    override fun getPreloadRequestBuilder(item: Any): RequestBuilder<Drawable>? {
         if (item is MangaPage) {
             return BookCover.preloadManga(
                 context,
                 item.mImageUrl,
                 sourceOrigin = ReadManga.book?.origin,
+                transformation = mTransformation,
             )
         }
         return null
