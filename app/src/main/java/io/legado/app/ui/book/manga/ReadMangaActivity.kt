@@ -103,6 +103,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     private var mRecyclerViewPreloader: RecyclerViewPreloader<Any>? = null
     private var waitingChapterIndex: Int? = null
+    private var edgeChapterMoveLocked = false
 
     private val networkChangedListener by lazy {
         NetworkChangedListener(this)
@@ -208,7 +209,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             setDisableMangaScale(AppConfig.disableMangaScale)
             setRecyclerViewPreloader(AppConfig.mangaPreDownloadNum)
             setPreScrollListener { _, dx, dy, position ->
-                if (isWaitingChapterContent() || loadingViewVisible) {
+                if (isChapterMoveLocked()) {
                     return@setPreScrollListener
                 }
                 if (tryMoveChapterAtEdge(scrollDirection(dx, dy))) {
@@ -233,14 +234,20 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 }
             }
             setNestedPreScrollListener { _, dx, dy, _ ->
-                if (isWaitingChapterContent() || loadingViewVisible) {
+                if (isChapterMoveLocked()) {
                     return@setNestedPreScrollListener
                 }
                 tryMoveChapterAtEdge(scrollDirection(dx, dy))
             }
             addOnScrollListener(object : RecyclerView.OnScrollListener() {
+                override fun onScrollStateChanged(recyclerView: RecyclerView, newState: Int) {
+                    if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                        unlockEdgeChapterMoveIfReady()
+                    }
+                }
+
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    if (isWaitingChapterContent() || loadingViewVisible) {
+                    if (isChapterMoveLocked()) {
                         return
                     }
                     tryMoveChapterAtEdge(scrollDirection(dx, dy))
@@ -284,6 +291,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             mAdapter.submitList(list) {
                 if (curFinish && waitingChapterIndex == ReadManga.durChapterIndex) {
                     waitingChapterIndex = null
+                    unlockEdgeChapterMoveIfReady()
                 }
                 if (loadingViewVisible && curFinish) {
                     binding.infobar.isVisible = true
@@ -409,6 +417,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun loadFail(msg: String, retry: Boolean) {
         lifecycleScope.launch {
             waitingChapterIndex = null
+            unlockEdgeChapterMoveIfReady()
             if (loadingViewVisible) {
                 binding.llLoading.isGone = true
                 binding.llRetry.isVisible = true
@@ -766,7 +775,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     private fun scrollPageTo(direction: Int) {
-        if (isWaitingChapterContent() || loadingViewVisible) {
+        if (isChapterMoveLocked()) {
             return
         }
         if (tryMoveChapterAtEdge(direction)) {
@@ -807,8 +816,20 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         return waitingChapterIndex == ReadManga.durChapterIndex
     }
 
+    private fun isChapterMoveLocked(): Boolean {
+        return edgeChapterMoveLocked || isWaitingChapterContent() || loadingViewVisible
+    }
+
+    private fun unlockEdgeChapterMoveIfReady() {
+        if (waitingChapterIndex == null
+            && binding.recyclerView.scrollState == RecyclerView.SCROLL_STATE_IDLE
+        ) {
+            edgeChapterMoveLocked = false
+        }
+    }
+
     private fun tryMoveChapterAtEdge(direction: Int): Boolean {
-        if (isWaitingChapterContent() || loadingViewVisible) {
+        if (isChapterMoveLocked()) {
             return false
         }
         if (direction == 0) {
@@ -829,6 +850,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 ReadManga.moveToNextChapter(toFirst = true).also {
                     if (it) {
                         waitingChapterIndex = nextChapterIndex
+                        edgeChapterMoveLocked = true
                     }
                 }
             }
@@ -842,6 +864,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 ReadManga.moveToPrevChapter(toLast = true).also {
                     if (it) {
                         waitingChapterIndex = prevChapterIndex
+                        edgeChapterMoveLocked = true
                     }
                 }
             }
