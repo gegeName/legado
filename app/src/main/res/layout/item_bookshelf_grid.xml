@@ -55,18 +55,18 @@
                 app:layout_constraintTop_toTopOf="@+id/iv_cover"
                 tools:ignore="RtlHardcoded" />
 
-            <io.legado.app.ui.widget.anima.RotateLoading
+            <com.google.android.material.progressindicator.LinearProgressIndicator
                 android:id="@+id/rl_loading"
-                android:layout_width="26dp"
-                android:layout_height="26dp"
+                android:layout_width="0dp"
+                android:layout_height="6dp"
                 android:elevation="2dp"
+                android:indeterminate="true"
                 android:scrollbars="none"
                 android:visibility="invisible"
                 app:layout_constraintBottom_toBottomOf="@id/iv_cover"
                 app:layout_constraintLeft_toLeftOf="@id/iv_cover"
                 app:layout_constraintRight_toRightOf="@id/iv_cover"
-                app:loading_color="@android:color/white"
-                app:loading_width="2dp"
+                app:trackThickness="6dp"
                 tools:ignore="RtlHardcoded" />
 
         </androidx.constraintlayout.widget.ConstraintLayout>
