@@ -2,6 +2,7 @@ package io.legado.app.utils
 
 import android.annotation.SuppressLint
 import android.app.Activity
+import android.content.Context
 import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
@@ -22,6 +23,10 @@ import androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_B
 import androidx.fragment.app.DialogFragment
 import io.legado.app.R
 import io.legado.app.ui.widget.dialog.TextDialog
+
+private val helpFileAliases = mapOf(
+    "rssRuleHelp" to "SourceMRssHelp"
+)
 
 inline fun <reified T : DialogFragment> AppCompatActivity.showDialogFragment(
     arguments: Bundle.() -> Unit = {}
@@ -249,6 +254,17 @@ val Activity.navigationBarGravity: Int
  * 显示目录help下的帮助文档
  */
 fun AppCompatActivity.showHelp(fileName: String) {
-    val mdText = String(assets.open("web/help/md/${fileName}.md").readBytes())
+    val mdText = readHelpMarkdown(fileName) ?: return
     showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
+}
+
+fun Context.readHelpMarkdown(fileName: String): String? {
+    val fileNames = listOfNotNull(fileName, helpFileAliases[fileName]).distinct()
+    fileNames.forEach { name ->
+        runCatching {
+            return String(assets.open("web/help/md/${name}.md").readBytes())
+        }
+    }
+    toastOnUi("帮助文件不存在: $fileName")
+    return null
 }

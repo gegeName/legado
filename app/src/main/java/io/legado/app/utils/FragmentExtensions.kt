@@ -106,7 +106,7 @@ fun Fragment.startActivityForBook(
 }
 
 fun Fragment.showHelp(fileName: String) {
-    val mdText = String(requireContext().assets.open("web/help/md/${fileName}.md").readBytes())
+    val mdText = requireContext().readHelpMarkdown(fileName) ?: return
     showDialogFragment(TextDialog(getString(R.string.help), mdText, TextDialog.Mode.MD))
 }
 
