@@ -42,6 +42,9 @@ class MangaAdapter(private val context: Context) :
     private var mTransformation: BitmapTransformation? = null
     private var currentMangaEInkThreshold = 0
 
+    val transformation: BitmapTransformation?
+        get() = mTransformation
+
     companion object {
         private const val LOADING_VIEW = 0
         private const val CONTENT_VIEW = 1
@@ -97,7 +100,7 @@ class MangaAdapter(private val context: Context) :
                 val item = mDiffer.currentList[layoutPosition]
                 if (item is MangaPage) {
                     loadImageWithRetry(
-                        item.mImageUrl, isHorizontal, mTransformation
+                        item.mImageUrl, isHorizontal, mTransformation, forceReload = true
                     )
                 }
             }
@@ -180,6 +183,7 @@ class MangaAdapter(private val context: Context) :
         super.onViewRecycled(vh)
         when (vh) {
             is PageViewHolder -> {
+                vh.clearLoadState()
                 vh.itemView.updateLayoutParams<ViewGroup.LayoutParams> {
                     height = MATCH_PARENT
                 }

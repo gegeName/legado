@@ -35,6 +35,7 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
     protected lateinit var mProgress: TextView
     protected lateinit var mFlProgress: FrameLayout
     protected var mRetry: Button? = null
+    private var loadingUrl: String? = null
 
     fun initComponent(
         loading: ProgressBar,
@@ -50,12 +51,21 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
         mFlProgress = flProgress
     }
 
+    fun clearLoadState() {
+        loadingUrl = null
+    }
+
     @SuppressLint("CheckResult")
     fun loadImageWithRetry(
         imageUrl: String,
         isHorizontal: Boolean,
-        transformation: Transformation<Bitmap>?
+        transformation: Transformation<Bitmap>?,
+        forceReload: Boolean = false
     ) {
+        if (!forceReload && loadingUrl == imageUrl && (mFlProgress.isGone || mRetry?.isVisible != true)) {
+            return
+        }
+        loadingUrl = imageUrl
         mFlProgress.isVisible = true
         mLoading.isVisible = true
         mRetry?.isGone = true

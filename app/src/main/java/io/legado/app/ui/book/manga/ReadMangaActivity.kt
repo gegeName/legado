@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.os.SystemClock
 import android.view.KeyEvent
 import android.view.Menu
 import android.view.MenuItem
@@ -37,6 +38,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.storage.Backup
 import io.legado.app.lib.dialogs.alert
+import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
 import io.legado.app.receiver.NetworkChangedListener
 import io.legado.app.ui.book.changesource.ChangeBookSourceDialog
@@ -104,6 +106,9 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     private var mRecyclerViewPreloader: RecyclerViewPreloader<Any>? = null
     private var waitingChapterIndex: Int? = null
     private var edgeChapterMoveLocked = false
+    private var lastPreloadKey: String? = null
+    private var lastScrollPreloadTime = 0L
+    private var lastScrollPreloadPosition = RecyclerView.NO_POSITION
 
     private val networkChangedListener by lazy {
         NetworkChangedListener(this)
@@ -250,7 +255,9 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                     if (isChapterMoveLocked()) {
                         return
                     }
-                    tryMoveChapterAtEdge(scrollDirection(dx, dy))
+                    val direction = scrollDirection(dx, dy)
+                    tryMoveChapterAtEdge(direction)
+                    preloadOnScroll(direction)
                 }
             })
         }
@@ -305,6 +312,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 }
 
                 if (curFinish) {
+                    preloadAround(pos, list)
                     if (!ReadManga.hasNextChapter) {
                         loadMoreView.noMore("暂无章节了！")
                     } else if (nextFinish) {
@@ -314,6 +322,63 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                     }
                 }
             }
+        }
+    }
+
+    private fun preloadAround(position: Int, list: List<Any>) {
+        val centerPage = list.getOrNull(position) as? MangaPage
+        val preloadKey = "$position:${list.size}:${centerPage?.mImageUrl}"
+        if (lastPreloadKey == preloadKey) {
+            return
+        }
+        lastPreloadKey = preloadKey
+        val maxPreload = AppConfig.mangaPreDownloadNum.coerceIn(2, 12)
+        preloadRange(list, position + 1, position + maxPreload)
+        preloadRange(list, position - 1, position - maxPreload)
+    }
+
+    private fun preloadOnScroll(direction: Int) {
+        if (direction == 0) return
+        val now = SystemClock.uptimeMillis()
+        if (now - lastScrollPreloadTime < 220) {
+            return
+        }
+        val position = binding.recyclerView.findCenterViewPosition()
+        if (position == RecyclerView.NO_POSITION) {
+            return
+        }
+        if (position == lastScrollPreloadPosition && now - lastScrollPreloadTime < 600) {
+            return
+        }
+        lastScrollPreloadTime = now
+        lastScrollPreloadPosition = position
+        preloadAhead(position, mAdapter.getItems(), direction)
+    }
+
+    private fun preloadAhead(position: Int, list: List<Any>, direction: Int) {
+        val maxPreload = AppConfig.mangaPreDownloadNum.coerceIn(2, 6)
+        preloadRange(
+            list,
+            position + direction,
+            position + direction * maxPreload
+        )
+    }
+
+    private fun preloadRange(list: List<Any>, start: Int, end: Int) {
+        if (list.isEmpty()) return
+        val step = if (start <= end) 1 else -1
+        var index = start
+        while (index != end + step) {
+            val page = list.getOrNull(index) as? MangaPage
+            page?.let {
+                BookCover.preloadManga(
+                    this,
+                    it.mImageUrl,
+                    sourceOrigin = ReadManga.book?.origin,
+                    transformation = mAdapter.transformation,
+                ).preload()
+            }
+            index += step
         }
     }
 
