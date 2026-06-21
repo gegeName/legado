@@ -16,6 +16,7 @@ import androidx.core.view.isVisible
 import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.PagerSnapHelper
+import androidx.recyclerview.widget.RecyclerView
 import com.bumptech.glide.Glide
 import com.bumptech.glide.integration.recyclerview.RecyclerViewPreloader
 import com.bumptech.glide.request.target.Target.SIZE_ORIGINAL
@@ -429,6 +430,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun scrollBy(distance: Int) {
         if (!binding.recyclerView.canScroll(1)) {
+            tryMoveChapterAtEdge(1)
             return
         }
         val time = ceil(16f / distance * 10000).toInt()
@@ -739,6 +741,9 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     }
 
     private fun scrollPageTo(direction: Int) {
+        if (tryMoveChapterAtEdge(direction)) {
+            return
+        }
         if (!binding.recyclerView.canScroll(direction)) {
             return
         }
@@ -759,6 +764,64 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             binding.recyclerView.scrollBy(dx, dy)
         } else {
             binding.recyclerView.smoothScrollBy(dx, dy)
+        }
+    }
+
+    private fun tryMoveChapterAtEdge(direction: Int): Boolean {
+        val edgePage = findCurrentChapterEdgePage(direction) ?: return false
+        val page = edgePage.second
+        if (page.chapterIndex != ReadManga.durChapterIndex || page.imageCount <= 0) {
+            return false
+        }
+        return if (direction > 0) {
+            if (page.index != page.imageCount - 1 || !isPageFullyAtEdge(edgePage.first, direction)) {
+                false
+            } else {
+                ReadManga.moveToNextChapter(toFirst = true)
+            }
+        } else {
+            if (page.index != 0 || !isPageFullyAtEdge(edgePage.first, direction)) {
+                false
+            } else {
+                ReadManga.moveToPrevChapter(toLast = true)
+            }
+        }
+    }
+
+    private fun findCurrentChapterEdgePage(direction: Int): Pair<Int, MangaPage>? {
+        val firstPosition = mLayoutManager.findFirstVisibleItemPosition()
+        val lastPosition = mLayoutManager.findLastVisibleItemPosition()
+        if (firstPosition == RecyclerView.NO_POSITION || lastPosition == RecyclerView.NO_POSITION) {
+            return null
+        }
+        val positions = if (direction > 0) {
+            lastPosition downTo firstPosition
+        } else {
+            firstPosition..lastPosition
+        }
+        for (position in positions) {
+            val page = mAdapter.getItem(position) as? MangaPage ?: continue
+            if (page.chapterIndex == ReadManga.durChapterIndex) {
+                return position to page
+            }
+        }
+        return null
+    }
+
+    private fun isPageFullyAtEdge(position: Int, direction: Int): Boolean {
+        val view = mLayoutManager.findViewByPosition(position) ?: return false
+        return if (AppConfig.enableMangaHorizontalScroll) {
+            if (direction > 0) {
+                view.right <= binding.recyclerView.width - binding.recyclerView.paddingEnd
+            } else {
+                view.left >= binding.recyclerView.paddingStart
+            }
+        } else {
+            if (direction > 0) {
+                view.bottom <= binding.recyclerView.height - binding.recyclerView.paddingBottom
+            } else {
+                view.top >= binding.recyclerView.paddingTop
+            }
         }
     }
 

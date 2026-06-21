@@ -36,8 +36,6 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
     protected lateinit var mFlProgress: FrameLayout
     protected var mRetry: Button? = null
 
-    private val minHeight = context.resources.displayMetrics.heightPixels * 2 / 3
-
     fun initComponent(
         loading: ProgressBar,
         image: AppCompatImageView,
@@ -56,7 +54,6 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
     fun loadImageWithRetry(
         imageUrl: String,
         isHorizontal: Boolean,
-        isLastImage: Boolean,
         transformation: Transformation<Bitmap>?
     ) {
         mFlProgress.isVisible = true
@@ -107,17 +104,10 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                         mImage.updateLayoutParams<FrameLayout.LayoutParams> {
                             gravity = Gravity.NO_GRAVITY
                         }
-                        if (isLastImage) {
-                            mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                                height = ViewGroup.LayoutParams.WRAP_CONTENT
-                            }
-                            itemView.minimumHeight = minHeight
-                        } else {
-                            mImage.updateLayoutParams<FrameLayout.LayoutParams> {
-                                height = ViewGroup.LayoutParams.MATCH_PARENT
-                            }
-                            itemView.minimumHeight = 0
+                        mImage.updateLayoutParams<FrameLayout.LayoutParams> {
+                            height = ViewGroup.LayoutParams.MATCH_PARENT
                         }
+                        itemView.minimumHeight = 0
                         mImage.scaleType = ImageView.ScaleType.FIT_XY
                     } else {
                         itemView.updateLayoutParams<ViewGroup.LayoutParams> {

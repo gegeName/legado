@@ -298,11 +298,16 @@ object ReadManga : CoroutineScope by MainScope() {
         }
     }
 
-    fun moveToPrevChapter(toFirst: Boolean = false): Boolean {
+    fun moveToPrevChapter(toFirst: Boolean = false, toLast: Boolean = false): Boolean {
         if (durChapterIndex > 0) {
             if (toFirst) {
                 mCallback?.showLoading()
                 durChapterPos = 0
+            }
+            if (toLast) {
+                mCallback?.showLoading()
+                durChapterPos = prevMangaChapter?.imageCount?.takeIf { it > 0 }?.let { it - 1 }
+                    ?: Int.MAX_VALUE
             }
             durChapterIndex--
             nextMangaChapter = curMangaChapter
