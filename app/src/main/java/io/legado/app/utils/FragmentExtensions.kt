@@ -46,7 +46,7 @@ fun Fragment.putPrefBoolean(key: String, value: Boolean = false) =
     requireContext().defaultSharedPreferences.edit { putBoolean(key, value) }
 
 fun Fragment.getPrefInt(key: String, defValue: Int = 0) =
-    requireContext().defaultSharedPreferences.getInt(key, defValue)
+    requireContext().defaultSharedPreferences.getIntCompat(key, defValue)
 
 fun Fragment.putPrefInt(key: String, value: Int) =
     requireContext().defaultSharedPreferences.edit { putInt(key, value) }

@@ -190,10 +190,28 @@ private fun String.toBooleanCompat(defValue: Boolean): Boolean {
 }
 
 fun Context.getPrefInt(key: String, defValue: Int = 0) =
-    defaultSharedPreferences.getInt(key, defValue)
+    defaultSharedPreferences.getIntCompat(key, defValue)
 
 fun Context.putPrefInt(key: String, value: Int) =
     defaultSharedPreferences.edit { putInt(key, value) }
+
+internal fun SharedPreferences.getIntCompat(key: String, defValue: Int): Int {
+    return try {
+        getInt(key, defValue)
+    } catch (_: ClassCastException) {
+        val value = when (val rawValue = all[key]) {
+            is Int -> rawValue
+            is Number -> rawValue.toLong().takeIf {
+                it in Int.MIN_VALUE..Int.MAX_VALUE
+            }?.toInt() ?: defValue
+            is String -> rawValue.toIntOrNull() ?: defValue
+            is Boolean -> if (rawValue) 1 else 0
+            else -> defValue
+        }
+        edit { putInt(key, value) }
+        value
+    }
+}
 
 fun Context.getPrefLong(key: String, defValue: Long = 0L) =
     defaultSharedPreferences.getLong(key, defValue)
