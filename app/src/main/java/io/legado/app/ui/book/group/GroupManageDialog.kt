@@ -121,7 +121,11 @@ class GroupManageDialog : BaseDialogFragment(R.layout.dialog_recycler_view),
         ) {
             binding.run {
                 root.setBackgroundColor(context.backgroundColor)
-                tvGroup.text = item.getManageName(context)
+                tvGroup.text = if (item.privateGroup) {
+                    "${item.getManageName(context)} (${context.getString(R.string.private_group)})"
+                } else {
+                    item.getManageName(context)
+                }
                 swShow.isChecked = item.show
             }
         }

@@ -74,6 +74,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
             }
             binding.spSort.setSelection(it.bookSort + 1)
             binding.cbEnableRefresh.isChecked = it.enableRefresh
+            binding.cbPrivateGroup.isChecked = it.privateGroup
         } ?: let {
             binding.toolBar.title = getString(R.string.add_group)
             binding.btnDelete.gone()
@@ -96,11 +97,13 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
                     val bookSort = binding.spSort.selectedItemPosition - 1
                     val coverPath = binding.ivCover.bitmapPath
                     val enableRefresh = binding.cbEnableRefresh.isChecked
+                    val privateGroup = binding.cbPrivateGroup.isChecked
                     bookGroup?.let {
                         it.groupName = groupName
                         it.cover = coverPath
                         it.bookSort = bookSort
                         it.enableRefresh = enableRefresh
+                        it.privateGroup = privateGroup
                         viewModel.upGroup(it) {
                             dismiss()
                         }
@@ -109,6 +112,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
                             groupName,
                             bookSort,
                             enableRefresh,
+                            privateGroup,
                             coverPath
                         ) {
                             dismiss()

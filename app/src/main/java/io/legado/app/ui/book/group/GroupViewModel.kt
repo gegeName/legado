@@ -19,6 +19,7 @@ class GroupViewModel(application: Application) : BaseViewModel(application) {
         groupName: String,
         bookSort: Int,
         enableRefresh: Boolean,
+        privateGroup: Boolean,
         cover: String?,
         finally: () -> Unit
     ) {
@@ -30,6 +31,7 @@ class GroupViewModel(application: Application) : BaseViewModel(application) {
                 cover = cover,
                 bookSort = bookSort,
                 enableRefresh = enableRefresh,
+                privateGroup = privateGroup,
                 order = appDb.bookGroupDao.maxOrder.plus(1)
             )
             appDb.bookGroupDao.getByID(groupId) ?: appDb.bookDao.removeGroup(groupId)

@@ -25,15 +25,32 @@ interface BookGroupDao {
 
     @get:Query(
         """
-        with const as (SELECT sum(groupId) sumGroupId FROM book_groups where groupId > 0)
-        SELECT book_groups.* FROM book_groups join const 
+        with const as (SELECT COALESCE(sum(groupId), 0) sumGroupId FROM book_groups where groupId > 0),
+        private_const as (SELECT COALESCE(sum(groupId), 0) privateGroupId FROM book_groups where groupId > 0 and privateGroup = 1)
+        SELECT book_groups.* FROM book_groups cross join const cross join private_const 
         where show > 0 
         and (
-            (groupId >= 0  and exists (select 1 from books where `group` & book_groups.groupId > 0))
+            (groupId >= 0 and exists (
+                select 1 from books
+                where `group` & book_groups.groupId > 0
+                and (book_groups.privateGroup = 1 or (private_const.privateGroupId & `group`) = 0)
+            ))
             or groupId = -1
-            or (groupId = -2 and exists (select 1 from books where type & ${BookType.local} > 0))
-            or (groupId = -3 and exists (select 1 from books where type & ${BookType.audio} > 0))
-            or (groupId = -11 and exists (select 1 from books where type & ${BookType.updateError} > 0))
+            or (groupId = -2 and exists (
+                select 1 from books
+                where type & ${BookType.local} > 0
+                and (private_const.privateGroupId & `group`) = 0
+            ))
+            or (groupId = -3 and exists (
+                select 1 from books
+                where type & ${BookType.audio} > 0
+                and (private_const.privateGroupId & `group`) = 0
+            ))
+            or (groupId = -11 and exists (
+                select 1 from books
+                where type & ${BookType.updateError} > 0
+                and (private_const.privateGroupId & `group`) = 0
+            ))
             or (groupId = -4 
                 and exists (
                     select 1 from books 

@@ -43,13 +43,31 @@ interface BookDao {
     )
     fun flowRoot(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books order by durChapterTime desc")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        ORDER BY durChapterTime DESC
+        """
+    )
     fun flowAll(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE type & ${BookType.audio} > 0")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE type & ${BookType.audio} > 0
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        """
+    )
     fun flowAudio(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE type & ${BookType.local} > 0")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE type & ${BookType.local} > 0
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        """
+    )
     fun flowLocal(): Flow<List<Book>>
 
     @Query(
@@ -68,16 +86,47 @@ interface BookDao {
     )
     fun flowLocalNoGroup(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE (`group` & :group) > 0")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE (`group` & :group) > 0
+        AND (
+            (SELECT privateGroup FROM book_groups WHERE groupId = :group) = 1
+            OR (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        )
+        """
+    )
     fun flowByUserGroup(group: Long): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE name like '%'||:key||'%' or author like '%'||:key||'%'")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE (name LIKE '%'||:key||'%' OR author LIKE '%'||:key||'%')
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        """
+    )
     fun flowSearch(key: String): Flow<List<Book>>
 
-    @Query("SELECT * FROM books where type & ${BookType.updateError} > 0 order by durChapterTime desc")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE type & ${BookType.updateError} > 0
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        ORDER BY durChapterTime DESC
+        """
+    )
     fun flowUpdateError(): Flow<List<Book>>
 
-    @Query("SELECT * FROM books WHERE (`group` & :group) > 0")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE (`group` & :group) > 0
+        AND (
+            (SELECT privateGroup FROM book_groups WHERE groupId = :group) = 1
+            OR (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        )
+        """
+    )
     fun getBooksByGroup(group: Long): List<Book>
 
     @Query("SELECT * FROM books WHERE `name` in (:names)")
@@ -112,10 +161,25 @@ interface BookDao {
     @get:Query("SELECT * FROM books")
     val all: List<Book>
 
-    @Query("SELECT * FROM books where type & :type > 0 and type & ${BookType.local} = 0")
+    @Query(
+        """
+        SELECT * FROM books
+        WHERE type & :type > 0
+        AND type & ${BookType.local} = 0
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        """
+    )
     fun getByTypeOnLine(type: Int): List<Book>
 
-    @get:Query("SELECT * FROM books where type & ${BookType.text} > 0 ORDER BY durChapterTime DESC limit 1")
+    @get:Query(
+        """
+        SELECT * FROM books
+        WHERE type & ${BookType.text} > 0
+        AND (COALESCE((SELECT sum(groupId) FROM book_groups WHERE groupId > 0 AND privateGroup = 1), 0) & `group`) = 0
+        ORDER BY durChapterTime DESC
+        LIMIT 1
+        """
+    )
     val lastReadBook: Book?
 
     @get:Query("SELECT bookUrl FROM books")
