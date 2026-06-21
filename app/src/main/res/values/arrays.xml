@@ -10,6 +10,21 @@
 		<item>Audio</item>
 		<item>Image</item>
 		<item>File</item>
+		<item>Video</item>
+	</string-array>
+
+	<string-array name="layout_type">
+		<item>List</item>
+		<item>Single column</item>
+		<item>Double column</item>
+		<item>Waterfall</item>
+		<item>Three columns</item>
+	</string-array>
+
+	<string-array name="rss_type">
+		<item>Web</item>
+		<item>Image</item>
+		<item>Video</item>
 	</string-array>
 
 	<string-array name="group_style">

@@ -26,6 +26,9 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     val isCronet = appCtx.getPrefBoolean(PreferKey.cronet)
     var useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
     var userAgent: String = getPrefUserAgent()
+    var editTheme = appCtx.getPrefInt(PreferKey.editTheme, 0)
+    var editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
+    var editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
     var isEInkMode = appCtx.getPrefString(PreferKey.themeMode) == "3"
     var clickActionTL = appCtx.getPrefInt(PreferKey.clickActionTL, 2)
     var clickActionTC = appCtx.getPrefInt(PreferKey.clickActionTC, 2)
@@ -41,9 +44,18 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
     var optimizeRender = CanvasRecorderFactory.isSupport
             && appCtx.getPrefBoolean(PreferKey.optimizeRender, false)
     var recordLog = appCtx.getPrefBoolean(PreferKey.recordLog)
+    var editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
+    var editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
+    var editAutoWrap = appCtx.getPrefBoolean(PreferKey.editAutoWrap, true)
+    var editAutoComplete = appCtx.getPrefBoolean(PreferKey.editAutoComplete, true)
 
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
+            PreferKey.editFontScale -> editFontScale = appCtx.getPrefInt(PreferKey.editFontScale, 16)
+            PreferKey.editNonPrintable -> editNonPrintable = appCtx.getPrefInt(PreferKey.editNonPrintable, 0)
+            PreferKey.editAutoWrap -> editAutoWrap = appCtx.getPrefBoolean(PreferKey.editAutoWrap, true)
+            PreferKey.editAutoComplete -> editAutoComplete = appCtx.getPrefBoolean(PreferKey.editAutoComplete, true)
+
             PreferKey.themeMode -> {
                 themeMode = appCtx.getPrefString(PreferKey.themeMode, "0")
                 isEInkMode = themeMode == "3"
@@ -83,6 +95,12 @@ object AppConfig : SharedPreferences.OnSharedPreferenceChangeListener {
                 appCtx.getPrefBoolean(PreferKey.useZhLayout)
 
             PreferKey.userAgent -> userAgent = getPrefUserAgent()
+
+            PreferKey.editTheme -> editTheme = appCtx.getPrefInt(PreferKey.editTheme, 0)
+
+            PreferKey.editThemeDark -> editThemeDark = appCtx.getPrefInt(PreferKey.editThemeDark, 0)
+
+            PreferKey.editTemeAuto -> editTemeAuto = appCtx.getPrefBoolean(PreferKey.editTemeAuto)
 
             PreferKey.antiAlias -> useAntiAlias = appCtx.getPrefBoolean(PreferKey.antiAlias)
 

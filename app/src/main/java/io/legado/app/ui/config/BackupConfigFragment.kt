@@ -168,18 +168,14 @@ class BackupConfigFragment : PreferenceFragment(),
         return false
     }
 
-    override fun onDestroy() {
-        super.onDestroy()
-        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
-    }
-
     override fun onSharedPreferenceChanged(sharedPreferences: SharedPreferences?, key: String?) {
         when (key) {
             PreferKey.backupPath -> upPreferenceSummary(key, getPrefString(key))
             PreferKey.webDavUrl,
             PreferKey.webDavAccount,
             PreferKey.webDavPassword,
-            PreferKey.webDavDir -> listView.post {
+            PreferKey.webDavDir -> view?.post {
+                if (view == null) return@post
                 upPreferenceSummary(key, appCtx.getPrefString(key))
                 viewModel.upWebDavConfig()
             }
@@ -393,6 +389,7 @@ class BackupConfigFragment : PreferenceFragment(),
     }
 
     override fun onDestroyView() {
+        preferenceManager.sharedPreferences?.unregisterOnSharedPreferenceChangeListener(this)
         super.onDestroyView()
         waitDialog.dismiss()
     }

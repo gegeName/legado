@@ -161,10 +161,33 @@ val Context.defaultSharedPreferences: SharedPreferences
     get() = PreferenceManager.getDefaultSharedPreferences(this)
 
 fun Context.getPrefBoolean(key: String, defValue: Boolean = false) =
-    defaultSharedPreferences.getBoolean(key, defValue)
+    defaultSharedPreferences.getBooleanCompat(key, defValue)
 
 fun Context.putPrefBoolean(key: String, value: Boolean = false) =
     defaultSharedPreferences.edit { putBoolean(key, value) }
+
+internal fun SharedPreferences.getBooleanCompat(key: String, defValue: Boolean): Boolean {
+    return try {
+        getBoolean(key, defValue)
+    } catch (_: ClassCastException) {
+        val value = when (val rawValue = all[key]) {
+            is Boolean -> rawValue
+            is String -> rawValue.toBooleanCompat(defValue)
+            is Number -> rawValue.toInt() != 0
+            else -> defValue
+        }
+        edit { putBoolean(key, value) }
+        value
+    }
+}
+
+private fun String.toBooleanCompat(defValue: Boolean): Boolean {
+    return when (lowercase()) {
+        "true", "1", "yes", "y", "on" -> true
+        "false", "0", "no", "n", "off" -> false
+        else -> defValue
+    }
+}
 
 fun Context.getPrefInt(key: String, defValue: Int = 0) =
     defaultSharedPreferences.getInt(key, defValue)

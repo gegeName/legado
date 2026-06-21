@@ -2,8 +2,6 @@ package io.legado.app.data
 
 import android.content.ContentValues
 import android.database.sqlite.SQLiteDatabase
-import android.os.Build
-import android.util.Log
 import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Room
@@ -55,7 +53,6 @@ import io.legado.app.data.entities.TxtTocRule
 import io.legado.app.help.DefaultData
 import org.intellij.lang.annotations.Language
 import splitties.init.appCtx
-import java.util.Locale
 
 val appDb by lazy {
     Room.databaseBuilder(appCtx, AppDatabase::class.java, AppDatabase.DATABASE_NAME)
@@ -67,7 +64,7 @@ val appDb by lazy {
 }
 
 @Database(
-    version = 75,
+    version = 76,
     exportSchema = true,
     entities = [Book::class, BookGroup::class, BookSource::class, BookChapter::class,
         ReplaceRule::class, SearchBook::class, SearchKeyword::class, Cookie::class,
@@ -108,6 +105,7 @@ val appDb by lazy {
         AutoMigration(from = 72, to = 73),
         AutoMigration(from = 73, to = 74),
         AutoMigration(from = 74, to = 75),
+        AutoMigration(from = 75, to = 76),
     ]
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -143,42 +141,25 @@ abstract class AppDatabase : RoomDatabase() {
         const val RSS_SOURCE_TABLE_NAME = "rssSources"
 
         val dbCallback = object : Callback() {
-
-            override fun onCreate(db: SupportSQLiteDatabase) {
-                // 只在 API 级别 23 (Marshmallow) 及以上版本尝试设置区域设置
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                    try {
-                        Log.d("AppDatabaseCallback", "准备 设置 locale for API ${Build.VERSION.SDK_INT}...")
-                        db.setLocale(Locale.CHINESE)
-                        // 在 21 上报错，但无法拦截
-                        Log.d("AppDatabaseCallback", "成功 设置 locale for API ${Build.VERSION.SDK_INT}.")
-                    } catch (e: Exception) {
-                        Log.e("AppDatabaseCallback", "错误 设置 locale in onCreate for API ${Build.VERSION.SDK_INT}", e)
-                    }
-                } else {
-                    Log.i("AppDatabaseCallback", "跳过 setLocale for API ${Build.VERSION.SDK_INT} (below M).")
-                }
-            }
-
             override fun onOpen(db: SupportSQLiteDatabase) {
                 @Language("sql")
                 val insertBookGroupAllSql = """
                     insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdAll}, '全部', -10, 1
+                    select ${BookGroup.IdAll}, '鍏ㄩ儴', -10, 1
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdAll})
                 """.trimIndent()
                 db.execSQL(insertBookGroupAllSql)
                 @Language("sql")
                 val insertBookGroupLocalSql = """
                     insert into book_groups(groupId, groupName, 'order', enableRefresh, show) 
-                    select ${BookGroup.IdLocal}, '本地', -9, 0, 1
+                    select ${BookGroup.IdLocal}, '鏈湴', -9, 0, 1
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdLocal})
                 """.trimIndent()
                 db.execSQL(insertBookGroupLocalSql)
                 @Language("sql")
                 val insertBookGroupMusicSql = """
                     insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdAudio}, '音频', -8, 1
+                    select ${BookGroup.IdAudio}, '闊抽', -8, 1
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdAudio})
                 """.trimIndent()
                 db.execSQL(insertBookGroupMusicSql)
@@ -199,7 +180,7 @@ abstract class AppDatabase : RoomDatabase() {
                 @Language("sql")
                 val insertBookGroupErrorSql = """
                     insert into book_groups(groupId, groupName, 'order', show) 
-                    select ${BookGroup.IdError}, '更新失败', -1, 1
+                    select ${BookGroup.IdError}, '鏇存柊澶辫触', -1, 1
                     where not exists (select * from book_groups where groupId = ${BookGroup.IdError})
                 """.trimIndent()
                 db.execSQL(insertBookGroupErrorSql)

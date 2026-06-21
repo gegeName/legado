@@ -2,6 +2,7 @@ package io.legado.app.ui.widget.keyboard
 
 import android.content.Context
 import android.graphics.Rect
+import android.os.Build
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
@@ -100,6 +101,24 @@ class KeyboardToolPop(
                 }
             }
         }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            adapter.addHeaderView {
+                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                    textView.text = "↩"
+                    root.setOnClickListener {
+                        callBack.onUndoClicked()
+                    }
+                }
+            }
+            adapter.addHeaderView {
+                ItemFilletTextBinding.inflate(context.layoutInflater, it, false).apply {
+                    textView.text = "↪"
+                    root.setOnClickListener {
+                        callBack.onRedoClicked()
+                    }
+                }
+            }
+        }
     }
 
     @Suppress("MemberVisibilityCanBePrivate")
@@ -166,6 +185,12 @@ class KeyboardToolPop(
         fun onHelpActionSelect(action: String)
 
         fun sendText(text: String)
+
+        fun onUndoClicked() {
+        }
+
+        fun onRedoClicked() {
+        }
 
     }
 

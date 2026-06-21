@@ -282,6 +282,9 @@ dependencies {
     implementation libs.firebase.perf
 
     implementation libs.glide.recyclerview
+    implementation(platform(libs.soraEditor.bom))
+    implementation(libs.soraEditor.core)
+    implementation(libs.soraEditor.language.textmate)
 
     //LeakCanary, 内存泄露检测
     //debugImplementation('com.squareup.leakcanary:leakcanary-android:2.7')

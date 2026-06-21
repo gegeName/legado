@@ -12,6 +12,7 @@ fragment = "1.8.9"
 documentfile = "1.1.0"
 
 libarchive = "1.1.6"
+soraEditor = "0.24.4"
 glide = "5.0.5"
 gson = "2.13.2"
 jsonPath = "2.10.0"
@@ -147,6 +148,9 @@ glide-avif = { module = "com.github.bumptech.glide:avif-integration", version.re
 avif = { module = "org.aomedia.avif.android:avif", version = "1.1.1.14d8e3c4" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version = "1.4" }
 
+soraEditor-bom = { module = "io.github.rosemoe:editor-bom", version.ref = "soraEditor" }
+soraEditor-core = { module = "io.github.rosemoe:editor" }
+soraEditor-language-textmate = { module = "io.github.rosemoe:language-textmate" }
 splitties-appctx = { module = "com.louiscad.splitties:splitties-appctx", version.ref = "splitties" }
 splitties-activities = { module = "com.louiscad.splitties:splitties-activities", version.ref = "splitties" }
 splitties-systemservices = { module = "com.louiscad.splitties:splitties-systemservices", version.ref = "splitties" }

@@ -6,6 +6,9 @@ object PreferKey {
     const val fontScale = "fontScale"
     const val themeMode = "themeMode"
     const val userAgent = "userAgent"
+    const val editTheme = "editTheme"
+    const val editThemeDark = "editThemeDark"
+    const val editTemeAuto = "editTemeAuto"
     const val showUnread = "showUnread"
     const val bookGroupStyle = "bookGroupStyle"
     const val useDefaultCover = "useDefaultCover"
@@ -186,4 +189,8 @@ object PreferKey {
     const val showReadTitleAddition = "showReadTitleAddition"
     const val readBarStyleFollowPage = "readBarStyleFollowPage"
     const val contentSelectSpeakMod = "contentReadAloudMod"
+    const val editFontScale = "editFontScale"
+    const val editNonPrintable = "editNonPrintable"
+    const val editAutoWrap = "editAutoWrap"
+    const val editAutoComplete = "editAutoComplete"
 }

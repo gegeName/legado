@@ -8,7 +8,7 @@ import kotlinx.coroutines.delay
 class ConcurrentRateLimiter(val source: BaseSource?) {
 
     companion object {
-        private val concurrentRecordMap = hashMapOf<String, ConcurrentRecord>()
+        val concurrentRecordMap = hashMapOf<String, ConcurrentRecord>()
     }
 
     /**
