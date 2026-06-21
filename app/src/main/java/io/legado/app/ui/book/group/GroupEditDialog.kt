@@ -69,6 +69,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
             binding.btnDelete.visible(it.groupId > 0 || it.groupId == Long.MIN_VALUE)
             binding.tieGroupName.setText(it.groupName)
             binding.ivCover.load(it.cover)
+            binding.cbPrivateGroup.visible(it.groupId > 0)
             if (it.bookSort + 1 !in 0..<binding.spSort.count) {
                 it.bookSort = -1
             }
@@ -78,6 +79,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
         } ?: let {
             binding.toolBar.title = getString(R.string.add_group)
             binding.btnDelete.gone()
+            binding.cbPrivateGroup.visible()
             binding.ivCover.load()
         }
         binding.run {
@@ -103,7 +105,7 @@ class GroupEditDialog() : BaseDialogFragment(R.layout.dialog_book_group_edit) {
                         it.cover = coverPath
                         it.bookSort = bookSort
                         it.enableRefresh = enableRefresh
-                        it.privateGroup = privateGroup
+                        it.privateGroup = it.groupId > 0 && privateGroup
                         viewModel.upGroup(it) {
                             dismiss()
                         }
