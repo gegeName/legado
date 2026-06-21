@@ -14,8 +14,11 @@ import io.legado.app.data.entities.BookProgress
 import io.legado.app.exception.NoStackTraceException
 import io.legado.app.help.AppWebDav
 import io.legado.app.help.book.BookHelp
+import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isLocal
 import io.legado.app.help.book.isLocalModified
+import io.legado.app.help.book.isNotShelf
+import io.legado.app.help.book.isSameNameAuthor
 import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.config.AppConfig
@@ -278,6 +281,42 @@ class ReadMangaViewModel(application: Application) : BaseViewModel(application) 
             book?.delete()
         }.onSuccess {
             success?.invoke()
+        }
+    }
+
+    fun addToBookshelf(success: (() -> Unit)?) {
+        execute {
+            val book = ReadManga.book ?: return@execute
+            book.removeType(BookType.notShelf)
+            if (book.order == 0) {
+                book.order = appDb.bookDao.minOrder - 1
+            }
+            book.lastCheckCount = 0
+            book.durChapterTime = System.currentTimeMillis()
+            book.durChapterIndex = ReadManga.durChapterIndex
+            book.durChapterPos = ReadManga.durChapterPos
+            appDb.bookChapterDao.getChapter(book.bookUrl, ReadManga.durChapterIndex)?.let {
+                book.durChapterTitle = it.getDisplayTitle(
+                    ContentProcessor.get(book.name, book.origin).getTitleReplaceRules(),
+                    book.getUseReplaceRule()
+                )
+            }
+            appDb.bookDao.getBook(book.name, book.author)?.takeIf {
+                it.bookUrl != book.bookUrl && !it.isNotShelf
+            }?.let {
+                book.durChapterIndex = it.durChapterIndex
+                book.durChapterPos = it.durChapterPos
+                book.durChapterTitle = it.durChapterTitle
+            }
+            book.save()
+            if (ReadManga.book?.isSameNameAuthor(book) == true) {
+                ReadManga.book = book
+            }
+            ReadManga.inBookshelf = true
+        }.onSuccess {
+            success?.invoke()
+        }.onError {
+            AppLog.put("添加漫画到书架失败\n${it.localizedMessage}", it, true)
         }
     }
 
