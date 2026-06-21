@@ -178,7 +178,7 @@ class MainActivity : VMBaseActivity<ActivityMainBinding, MainViewModel>(),
 
     private fun initView() = binding.run {
         viewPagerMain.setEdgeEffectColor(primaryColor)
-        viewPagerMain.offscreenPageLimit = 3
+        viewPagerMain.offscreenPageLimit = 1
         viewPagerMain.adapter = adapter
         viewPagerMain.addOnPageChangeListener(PageChangeCallback())
         bottomNavigationView.elevation = elevation
