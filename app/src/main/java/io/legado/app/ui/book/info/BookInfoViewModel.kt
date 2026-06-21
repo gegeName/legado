@@ -102,16 +102,7 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
             upCoverByRule(book)
             bookSource = if (book.isLocal) null else
                 appDb.bookSourceDao.getBookSource(book.origin)
-            if (book.tocUrl.isEmpty() && !book.isLocal) {
-                loadBookInfo(book, runPreUpdateJs = inBookshelf)
-            } else {
-                val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl)
-                if (chapterList.isNotEmpty()) {
-                    chapterListData.postValue(chapterList)
-                } else {
-                    loadChapter(book)
-                }
-            }
+            loadBookInfo(book, runPreUpdateJs = inBookshelf, forceRefresh = false)
         }
     }
 
@@ -172,8 +163,25 @@ class BookInfoViewModel(application: Application) : BaseViewModel(application) {
         book: Book,
         canReName: Boolean = true,
         runPreUpdateJs: Boolean = true,
-        scope: CoroutineScope = viewModelScope
+        scope: CoroutineScope = viewModelScope,
+        forceRefresh: Boolean = true
     ) {
+        if (!forceRefresh) {
+            execute {
+                appDb.bookChapterDao.getChapterList(book.bookUrl)
+            }.onSuccess { chapterList ->
+                if (chapterList.isNotEmpty()) {
+                    chapterListData.postValue(chapterList)
+                    return@onSuccess
+                }
+                if (book.tocUrl.isEmpty() && !book.isLocal) {
+                    loadBookInfo(book, canReName, runPreUpdateJs, scope, forceRefresh = true)
+                } else {
+                    loadChapter(book, runPreUpdateJs, scope)
+                }
+            }
+            return
+        }
         if (book.isLocal) {
             LocalBook.upBookInfo(book)
             bookData.postValue(book)
