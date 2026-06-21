@@ -11,17 +11,102 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:attachToActivity="false"
-        app:contentLayout="@layout/view_search"
         app:layout_constraintTop_toTopOf="parent"
         app:title="@string/discovery" />
 
-    <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
-        android:id="@+id/rv_find"
+    <LinearLayout
+        android:id="@+id/source_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/background"
+        android:clickable="true"
+        android:focusable="true"
+        android:foreground="?android:attr/selectableItemBackground"
+        android:gravity="center_vertical"
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="12dp"
+        app:layout_constraintTop_toBottomOf="@+id/title_bar">
+
+        <TextView
+            android:id="@+id/tv_source_name"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:includeFontPadding="false"
+            android:maxLines="1"
+            android:textColor="@color/primaryText"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            tools:text="发现源" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_source_menu"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="@string/discovery"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_down"
+            app:tint="@color/tv_text_summary" />
+
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/kind_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@color/background"
+        android:gravity="top"
+        android:orientation="horizontal"
+        app:layout_constraintTop_toBottomOf="@+id/source_bar">
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/rv_kinds"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:clipToPadding="false"
+            android:nestedScrollingEnabled="false"
+            android:overScrollMode="never"
+            android:paddingStart="13dp"
+            android:paddingTop="6dp"
+            android:paddingEnd="4dp"
+            android:paddingBottom="8dp"
+            android:scrollbars="none"
+            app:flexDirection="row"
+            app:flexWrap="wrap"
+            app:layoutManager="com.google.android.flexbox.FlexboxLayoutManager"
+            tools:listitem="@layout/item_fillet_text" />
+
+        <androidx.appcompat.widget.AppCompatImageView
+            android:id="@+id/iv_kind_toggle"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:contentDescription="@string/discovery"
+            android:padding="8dp"
+            android:src="@drawable/ic_arrow_down"
+            app:tint="@color/tv_text_summary" />
+
+    </LinearLayout>
+
+    <io.legado.app.ui.widget.dynamiclayout.DynamicFrameLayout
+        android:id="@+id/content_view"
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
         app:layout_constraintBottom_toBottomOf="parent"
-        tools:listitem="@layout/item_find_book" />
+        app:layout_constraintTop_toBottomOf="@+id/kind_bar">
+
+        <io.legado.app.ui.widget.recycler.RecyclerViewAtPager2
+            android:id="@+id/rv_find"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipToPadding="false"
+            app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
+            tools:listitem="@layout/item_search" />
+
+    </io.legado.app.ui.widget.dynamiclayout.DynamicFrameLayout>
 
     <TextView
         android:id="@+id/tv_empty_msg"
@@ -31,7 +116,7 @@
         android:gravity="center"
         android:visibility="gone"
         android:text="@string/explore_empty"
-        app:layout_constraintTop_toBottomOf="@+id/title_bar"
+        app:layout_constraintTop_toBottomOf="@+id/kind_bar"
         app:layout_constraintBottom_toBottomOf="parent"
         app:layout_constraintLeft_toLeftOf="parent"
         app:layout_constraintRight_toRightOf="parent"

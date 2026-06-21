@@ -123,4 +123,14 @@ by appCtx.getSharedPreferences("local", Context.MODE_PRIVATE) {
             putBoolean("appCrash", value)
         }
 
+    var lastExploreSourceUrl: String?
+        get() = getString("lastExploreSourceUrl", null)
+        set(value) {
+            if (value != null) {
+                putString("lastExploreSourceUrl", value)
+            } else {
+                remove("lastExploreSourceUrl")
+            }
+        }
+
 }
