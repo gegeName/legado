@@ -63,9 +63,12 @@
                 android:indeterminate="true"
                 android:scrollbars="none"
                 android:visibility="invisible"
+                app:indicatorColor="?attr/colorAccent"
                 app:layout_constraintBottom_toBottomOf="@id/iv_cover"
                 app:layout_constraintLeft_toLeftOf="@id/iv_cover"
                 app:layout_constraintRight_toRightOf="@id/iv_cover"
+                app:trackColor="@android:color/transparent"
+                app:trackCornerRadius="3dp"
                 app:trackThickness="6dp"
                 tools:ignore="RtlHardcoded" />
 
