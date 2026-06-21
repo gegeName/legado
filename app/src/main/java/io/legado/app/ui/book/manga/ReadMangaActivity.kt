@@ -109,6 +109,8 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     private var lastPreloadKey: String? = null
     private var lastScrollPreloadTime = 0L
     private var lastScrollPreloadPosition = RecyclerView.NO_POSITION
+    private var lastPreloadListSignature: String? = null
+    private val preloadedImageUrls = linkedSetOf<String>()
 
     private val networkChangedListener by lazy {
         NetworkChangedListener(this)
@@ -295,6 +297,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             val list = data.items
             val curFinish = data.curFinish
             val nextFinish = data.nextFinish
+            resetPreloadCacheIfNeeded(list)
             mAdapter.submitList(list) {
                 if (curFinish && waitingChapterIndex == ReadManga.durChapterIndex) {
                     waitingChapterIndex = null
@@ -370,16 +373,34 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         var index = start
         while (index != end + step) {
             val page = list.getOrNull(index) as? MangaPage
-            page?.let {
+            val imageUrl = page?.mImageUrl
+            if (!imageUrl.isNullOrBlank() && preloadedImageUrls.add(imageUrl)) {
+                if (preloadedImageUrls.size > 96) {
+                    preloadedImageUrls.clear()
+                    preloadedImageUrls.add(imageUrl)
+                }
                 BookCover.preloadManga(
                     this,
-                    it.mImageUrl,
+                    imageUrl,
                     sourceOrigin = ReadManga.book?.origin,
                     transformation = mAdapter.transformation,
                 ).preload()
             }
             index += step
         }
+    }
+
+    private fun resetPreloadCacheIfNeeded(list: List<Any>) {
+        val firstUrl = list.firstOrNull { it is MangaPage }?.let { (it as MangaPage).mImageUrl }
+        val lastUrl = list.lastOrNull { it is MangaPage }?.let { (it as MangaPage).mImageUrl }
+        val signature = "${list.size}:$firstUrl:$lastUrl"
+        if (lastPreloadListSignature == signature) {
+            return
+        }
+        lastPreloadListSignature = signature
+        lastPreloadKey = null
+        lastScrollPreloadPosition = RecyclerView.NO_POSITION
+        preloadedImageUrls.clear()
     }
 
     private fun upInfoBar(page: Any?) {
