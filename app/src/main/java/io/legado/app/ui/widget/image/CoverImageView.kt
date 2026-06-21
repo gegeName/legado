@@ -13,6 +13,7 @@ import android.view.ViewGroup
 import androidx.appcompat.widget.AppCompatImageView
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.Lifecycle
+import io.legado.app.R
 import com.bumptech.glide.load.DataSource
 import com.bumptech.glide.load.engine.GlideException
 import com.bumptech.glide.request.RequestListener
@@ -38,6 +39,7 @@ class CoverImageView @JvmOverloads constructor(
     private var filletPath = Path()
     private var viewWidth: Float = 0f
     private var viewHeight: Float = 0f
+    private var coverRadius: Float = 10f
     private var defaultCover = true
     var bitmapPath: String? = null
         private set
@@ -58,6 +60,13 @@ class CoverImageView @JvmOverloads constructor(
         textPaint.isAntiAlias = true
         textPaint.textAlign = Paint.Align.CENTER
         textPaint
+    }
+
+    init {
+        context.obtainStyledAttributes(attrs, R.styleable.CoverImageView).apply {
+            coverRadius = getDimension(R.styleable.CoverImageView_coverRadius, coverRadius)
+            recycle()
+        }
     }
 
     override fun setLayoutParams(params: ViewGroup.LayoutParams?) {
@@ -88,15 +97,16 @@ class CoverImageView @JvmOverloads constructor(
         filletPath.reset()
         if (width > 10 && viewHeight > 10) {
             filletPath.apply {
-                moveTo(10f, 0f)
-                lineTo(viewWidth - 10, 0f)
-                quadTo(viewWidth, 0f, viewWidth, 10f)
-                lineTo(viewWidth, viewHeight - 10)
-                quadTo(viewWidth, viewHeight, viewWidth - 10, viewHeight)
-                lineTo(10f, viewHeight)
-                quadTo(0f, viewHeight, 0f, viewHeight - 10)
-                lineTo(0f, 10f)
-                quadTo(0f, 0f, 10f, 0f)
+                val radius = coverRadius.coerceAtMost(minOf(viewWidth, viewHeight) / 2)
+                moveTo(radius, 0f)
+                lineTo(viewWidth - radius, 0f)
+                quadTo(viewWidth, 0f, viewWidth, radius)
+                lineTo(viewWidth, viewHeight - radius)
+                quadTo(viewWidth, viewHeight, viewWidth - radius, viewHeight)
+                lineTo(radius, viewHeight)
+                quadTo(0f, viewHeight, 0f, viewHeight - radius)
+                lineTo(0f, radius)
+                quadTo(0f, 0f, radius, 0f)
                 close()
             }
         }
