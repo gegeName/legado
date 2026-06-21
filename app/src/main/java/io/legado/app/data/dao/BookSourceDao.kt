@@ -173,6 +173,14 @@ interface BookSourceDao {
     fun getEnabledPartByGroup(group: String): List<BookSourcePart>
 
     @Query(
+        """select bp.* 
+        from book_sources b join book_sources_part bp on b.bookSourceUrl = bp.bookSourceUrl
+        where b.enabled = 1 and b.bookSourceType = :type 
+        order by b.customOrder"""
+    )
+    fun getEnabledPartByType(type: Int): List<BookSourcePart>
+
+    @Query(
         """select * from book_sources 
         where bookUrlPattern != 'NONE' and bookSourceType = :type order by customOrder asc"""
     )

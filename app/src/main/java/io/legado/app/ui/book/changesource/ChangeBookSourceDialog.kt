@@ -59,10 +59,11 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
     Toolbar.OnMenuItemClickListener,
     ChangeBookSourceAdapter.CallBack {
 
-    constructor(name: String, author: String) : this() {
+    constructor(name: String, author: String, origin: String? = null) : this() {
         arguments = Bundle().apply {
             putString("name", name)
             putString("author", author)
+            putString("origin", origin)
         }
     }
 
@@ -307,6 +308,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                 upGroupMenuName()
                 lifecycleScope.launch(IO) {
                     viewModel.stopSearch()
+                    viewModel.searchByGroup()
                     if (viewModel.refresh()) {
                         viewModel.startSearch()
                     }

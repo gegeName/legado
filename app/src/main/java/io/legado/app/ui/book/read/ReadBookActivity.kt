@@ -459,7 +459,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_book_change_source -> {
                 binding.readMenu.runMenuOut()
                 ReadBook.book?.let {
-                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author, it.origin))
                 }
             }
 

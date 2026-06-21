@@ -110,7 +110,7 @@ class AudioPlayActivity :
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_change_source -> AudioPlay.book?.let {
-                showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+                showDialogFragment(ChangeBookSourceDialog(it.name, it.author, it.origin))
             }
 
             R.id.menu_login -> AudioPlay.bookSource?.let {

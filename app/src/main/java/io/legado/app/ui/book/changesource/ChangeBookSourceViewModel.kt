@@ -29,6 +29,7 @@ import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
 import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.onEachIndexed
+import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
@@ -65,6 +66,9 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     var searchFinishCallback: ((isEmpty: Boolean) -> Unit)? = null
     var name: String = ""
     var author: String = ""
+    private var origin: String? = null
+    private var originSourceType: Int? = null
+    private var originGroupApplied = false
     private var fromReadBookActivity = false
     private var oldBook: Book? = null
     private var screenKey: String = ""
@@ -118,6 +122,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         }
 
+        applyOriginSearchGroup()
         getDbSearchBooks().let {
             searchBooks.clear()
             searchBooks.addAll(it)
@@ -158,8 +163,36 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bundle.getString("author")?.let {
                 author = it.replace(AppPattern.authorRegex, "")
             }
+            origin = bundle.getString("origin")
             this.fromReadBookActivity = fromReadBookActivity
             oldBook = book
+        }
+    }
+
+    private fun applyOriginSearchGroup() {
+        if (originGroupApplied) return
+        originGroupApplied = true
+        val sourceOrigin = origin ?: return
+        val source = appDb.bookSourceDao.getBookSource(sourceOrigin) ?: return
+        val sourceGroups = source.bookSourceGroup
+            ?.splitNotBlank(AppPattern.splitGroupRegex)
+            ?.toList()
+            .orEmpty()
+        if (sourceGroups.isEmpty()) {
+            originSourceType = source.bookSourceType
+            AppConfig.searchGroup = ""
+            return
+        }
+        if (AppConfig.searchGroup in sourceGroups) return
+        val enabledGroup = sourceGroups.firstOrNull {
+            appDb.bookSourceDao.getEnabledPartByGroup(it).isNotEmpty()
+        }
+        if (enabledGroup != null) {
+            originSourceType = null
+            AppConfig.searchGroup = enabledGroup
+        } else {
+            originSourceType = source.bookSourceType
+            AppConfig.searchGroup = ""
         }
     }
 
@@ -194,7 +227,10 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             tocMapChapterCount = 0
             _changeSourceProgress.value = 0 to ""
             val searchGroup = AppConfig.searchGroup
-            if (searchGroup.isBlank()) {
+            val sourceType = originSourceType
+            if (sourceType != null) {
+                bookSourceParts.addAll(appDb.bookSourceDao.getEnabledPartByType(sourceType))
+            } else if (searchGroup.isBlank()) {
                 bookSourceParts.addAll(appDb.bookSourceDao.allEnabledPart)
             } else {
                 val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
@@ -397,27 +433,40 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun getDbSearchBooks(): List<SearchBook> {
+        val sourceType = originSourceType
         return if (screenKey.isEmpty()) {
             if (AppConfig.changeSourceCheckAuthor) {
-                appDb.searchBookDao.changeSourceByGroup(
-                    name, author, AppConfig.searchGroup
-                )
+                if (sourceType != null) {
+                    appDb.searchBookDao.changeSourceByType(name, author, sourceType)
+                } else {
+                    appDb.searchBookDao.changeSourceByGroup(name, author, AppConfig.searchGroup)
+                }
             } else {
-                appDb.searchBookDao.changeSourceByGroup(
-                    name, "", AppConfig.searchGroup
-                )
+                if (sourceType != null) {
+                    appDb.searchBookDao.changeSourceByType(name, "", sourceType)
+                } else {
+                    appDb.searchBookDao.changeSourceByGroup(name, "", AppConfig.searchGroup)
+                }
             }
         } else {
             if (AppConfig.changeSourceCheckAuthor) {
-                appDb.searchBookDao.changeSourceSearch(
-                    name, author, screenKey, AppConfig.searchGroup
-                )
+                if (sourceType != null) {
+                    appDb.searchBookDao.changeSourceSearchByType(name, author, screenKey, sourceType)
+                } else {
+                    appDb.searchBookDao.changeSourceSearch(name, author, screenKey, AppConfig.searchGroup)
+                }
             } else {
-                appDb.searchBookDao.changeSourceSearch(
-                    name, "", screenKey, AppConfig.searchGroup
-                )
+                if (sourceType != null) {
+                    appDb.searchBookDao.changeSourceSearchByType(name, "", screenKey, sourceType)
+                } else {
+                    appDb.searchBookDao.changeSourceSearch(name, "", screenKey, AppConfig.searchGroup)
+                }
             }
         }
+    }
+
+    fun searchByGroup() {
+        originSourceType = null
     }
 
     /**

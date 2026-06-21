@@ -508,7 +508,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             R.id.menu_change_source -> {
                 binding.mangaMenu.runMenuOut()
                 ReadManga.book?.let {
-                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author))
+                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author, it.origin))
                 }
             }
 
