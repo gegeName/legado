@@ -102,7 +102,8 @@
             android:id="@+id/rv_find"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
-            android:clipToPadding="false"
+            android:fadingEdgeLength="50dp"
+            android:requiresFadingEdge="vertical"
             app:layoutManager="androidx.recyclerview.widget.LinearLayoutManager"
             tools:listitem="@layout/item_search" />
 
