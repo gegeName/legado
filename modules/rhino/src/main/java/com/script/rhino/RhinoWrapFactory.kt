@@ -29,6 +29,8 @@ import org.mozilla.javascript.NativeJavaPackage
 import org.mozilla.javascript.ScriptRuntime
 import org.mozilla.javascript.Scriptable
 import org.mozilla.javascript.WrapFactory
+import org.mozilla.javascript.lc.type.TypeInfo
+import org.mozilla.javascript.lc.type.TypeInfoFactory
 
 /**
  * This wrap factory is used for security reasons. JSR 223 script
@@ -56,6 +58,19 @@ object RhinoWrapFactory : WrapFactory() {
         if (!RhinoClassShutter.visibleToScripts(javaObject)) {
             return null
         }
+        return wrapOrNull(scope, javaObject, staticType?.let { TypeInfoFactory.GLOBAL.create(it) })
+            ?: super.wrapAsJavaObject(cx, scope, javaObject, staticType)
+    }
+
+    override fun wrapAsJavaObject(
+        cx: Context,
+        scope: Scriptable?,
+        javaObject: Any,
+        staticType: TypeInfo?
+    ): Scriptable? {
+        if (!RhinoClassShutter.visibleToScripts(javaObject)) {
+            return null
+        }
         return wrapOrNull(scope, javaObject, staticType)
             ?: super.wrapAsJavaObject(cx, scope, javaObject, staticType)
     }
@@ -77,7 +92,7 @@ object RhinoWrapFactory : WrapFactory() {
     private fun wrapOrNull(
         scope: Scriptable?,
         javaObject: Any,
-        staticType: Class<*>?
+        staticType: TypeInfo?
     ): Scriptable? {
         return factories[javaObject.javaClass]?.wrap(scope, javaObject, staticType)
     }
