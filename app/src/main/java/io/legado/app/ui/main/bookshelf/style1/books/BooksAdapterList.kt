@@ -70,16 +70,15 @@ class BooksAdapterList(
 
     private fun upRefresh(binding: ItemBookshelfListBinding, item: Book) {
         if (!item.isLocal && callBack.isUpdate(item.bookUrl)) {
-            binding.bvUnread.invisible()
             binding.rlLoading.visible()
         } else {
             binding.rlLoading.gone()
-            if (AppConfig.showUnread) {
-                binding.bvUnread.setHighlight(item.lastCheckCount > 0)
-                binding.bvUnread.setBadgeCount(item.getUnreadChapterNum())
-            } else {
-                binding.bvUnread.invisible()
-            }
+        }
+        if (AppConfig.showUnread) {
+            binding.bvUnread.setHighlight(item.lastCheckCount > 0)
+            binding.bvUnread.setBadgeCount(item.getUnreadBadgeCount())
+        } else {
+            binding.bvUnread.invisible()
         }
     }
 

@@ -43,7 +43,7 @@ abstract class BaseBooksAdapter<VH : RecyclerView.ViewHolder>(
                             oldItem.latestChapterTitle == newItem.latestChapterTitle &&
                             oldItem.lastCheckCount == newItem.lastCheckCount &&
                             oldItem.getDisplayCover() == newItem.getDisplayCover() &&
-                            oldItem.getUnreadChapterNum() == newItem.getUnreadChapterNum()
+                            oldItem.getUnreadBadgeCount() == newItem.getUnreadBadgeCount()
                 }
 
                 oldItem is BookGroup && newItem is BookGroup -> {
@@ -76,7 +76,7 @@ abstract class BaseBooksAdapter<VH : RecyclerView.ViewHolder>(
                     }
                     if (oldItem.lastCheckCount != newItem.lastCheckCount
                         || oldItem.durChapterTime != newItem.durChapterTime
-                        || oldItem.getUnreadChapterNum() != newItem.getUnreadChapterNum()
+                        || oldItem.getUnreadBadgeCount() != newItem.getUnreadBadgeCount()
                         || oldItem.lastCheckCount != newItem.lastCheckCount
                     ) {
                         bundle.putBoolean("refresh", true)

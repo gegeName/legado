@@ -162,6 +162,8 @@ data class Book(
 
     fun getUnreadChapterNum() = max(simulatedTotalChapterNum() - durChapterIndex - 1, 0)
 
+    fun getUnreadBadgeCount() = max(getUnreadChapterNum(), lastCheckCount)
+
     fun getDisplayCover() = if (customCoverUrl.isNullOrEmpty()) coverUrl else customCoverUrl
 
     fun getDisplayIntro() = if (customIntro.isNullOrEmpty()) intro else customIntro
