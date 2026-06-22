@@ -34,6 +34,7 @@ import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
 import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.ui.about.AppLogDialog
+import io.legado.app.ui.book.changesource.ChangeBookSourceViewModel
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.source.manage.BookSourceActivity
 import io.legado.app.utils.ColorUtils
@@ -133,7 +134,10 @@ class SearchActivity : VMBaseActivity<ActivityBookSearchBinding, SearchViewModel
                             hasChecked = true
                         }
                     }
-            groups?.forEach {
+            ChangeBookSourceViewModel.defaultSearchGroups
+                .plus(groups.orEmpty())
+                .distinct()
+                .forEach {
                 if (searchScopeNames.contains(it)) {
                     menu.add(R.id.menu_group_1, Menu.NONE, Menu.NONE, it).apply {
                         isChecked = true

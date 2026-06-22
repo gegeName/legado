@@ -95,7 +95,7 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
                         setMessage("${searchGroup}分组搜索结果为空,是否切换到全部分组")
                         noButton()
                         yesButton {
-                            AppConfig.searchGroup = ""
+                            viewModel.selectSearchGroup("")
                             upGroupMenu()
                             viewModel.startSearch()
                         }
@@ -279,9 +279,9 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             else -> if (item?.groupId == R.id.source_group && !item.isChecked) {
                 item.isChecked = true
                 if (item.title.toString() == getString(R.string.all_source)) {
-                    AppConfig.searchGroup = ""
+                    viewModel.selectSearchGroup("")
                 } else {
-                    AppConfig.searchGroup = item.title.toString()
+                    viewModel.selectSearchGroup(item.title.toString())
                 }
                 lifecycleScope.launch(IO) {
                     viewModel.stopSearch()
@@ -380,7 +380,9 @@ class ChangeChapterSourceDialog() : BaseDialogFragment(R.layout.dialog_chapter_c
             menu.removeGroup(R.id.source_group)
             val allItem = menu.add(R.id.source_group, Menu.NONE, Menu.NONE, R.string.all_source)
             var hasSelectedGroup = false
-            groups.forEach { group ->
+            ChangeBookSourceViewModel.defaultSearchGroups.plus(groups)
+                .distinct()
+                .forEach { group ->
                 menu.add(R.id.source_group, Menu.NONE, Menu.NONE, group)?.let {
                     if (group == selectedGroup) {
                         it.isChecked = true

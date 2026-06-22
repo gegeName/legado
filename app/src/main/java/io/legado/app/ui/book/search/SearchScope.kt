@@ -6,6 +6,7 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.BookSourcePart
 import io.legado.app.help.config.AppConfig
+import io.legado.app.ui.book.changesource.ChangeBookSourceViewModel
 import io.legado.app.utils.splitNotBlank
 import splitties.init.appCtx
 
@@ -96,6 +97,7 @@ data class SearchScope(private var scope: String) {
             this.scope = stringBuilder.toString()
         }
         stateLiveData.postValue(this.scope)
+        save()
     }
 
     /**
@@ -115,7 +117,10 @@ data class SearchScope(private var scope: String) {
             } else {
                 val oldScope = scope.splitNotBlank(",")
                 val newScope = oldScope.filter {
-                    val bookSources = appDb.bookSourceDao.getEnabledPartByGroup(it)
+                    val bookSources = ChangeBookSourceViewModel
+                        .sourceTypeForDefaultGroup(it)
+                        ?.let { type -> appDb.bookSourceDao.getEnabledPartByType(type) }
+                        ?: appDb.bookSourceDao.getEnabledPartByGroup(it)
                     list.addAll(bookSources)
                     bookSources.isNotEmpty()
                 }

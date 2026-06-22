@@ -28,6 +28,7 @@ import io.legado.app.help.coroutine.Coroutine
 import io.legado.app.help.source.clearExploreKindsCache
 import io.legado.app.lib.dialogs.alert
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.book.changesource.ChangeBookSourceViewModel
 import io.legado.app.ui.book.explore.ExploreShowAdapter
 import io.legado.app.ui.book.info.BookInfoActivity
 import io.legado.app.ui.book.search.SearchActivity
@@ -205,7 +206,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
             when {
                 searchKey.isNullOrBlank() -> appDb.bookSourceDao.flowExplore()
                 searchKey.startsWith("group:") -> {
-                    appDb.bookSourceDao.flowGroupExplore(searchKey.substringAfter("group:"))
+                    val group = searchKey.substringAfter("group:")
+                    ChangeBookSourceViewModel.sourceTypeForDefaultGroup(group)
+                        ?.let { appDb.bookSourceDao.flowExploreByType(it) }
+                        ?: appDb.bookSourceDao.flowGroupExplore(group)
                 }
                 else -> appDb.bookSourceDao.flowExplore(searchKey)
             }.flowWithLifecycleAndDatabaseChange(
@@ -225,7 +229,10 @@ class ExploreFragment() : VMBaseFragment<ExploreViewModel>(R.layout.fragment_exp
 
     private fun upGroupsMenu() = groupsMenu?.transaction { subMenu ->
         subMenu.removeGroup(R.id.menu_group_text)
-        groups.forEach {
+        ChangeBookSourceViewModel.defaultSearchGroups
+            .plus(groups)
+            .distinct()
+            .forEach {
             subMenu.add(R.id.menu_group_text, Menu.NONE, Menu.NONE, it)
         }
     }

@@ -87,7 +87,7 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                         setMessage("${searchGroup}分组搜索结果为空,是否切换到全部分组")
                         cancelButton()
                         okButton {
-                            AppConfig.searchGroup = ""
+                            viewModel.selectSearchGroup("")
                             upGroupMenuName()
                             viewModel.startSearch()
                         }
@@ -301,14 +301,13 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
             else -> if (item?.groupId == R.id.source_group && !item.isChecked) {
                 item.isChecked = true
                 if (item.title.toString() == getString(R.string.all_source)) {
-                    AppConfig.searchGroup = ""
+                    viewModel.selectSearchGroup("")
                 } else {
-                    AppConfig.searchGroup = item.title.toString()
+                    viewModel.selectSearchGroup(item.title.toString())
                 }
                 upGroupMenuName()
                 lifecycleScope.launch(IO) {
                     viewModel.stopSearch()
-                    viewModel.searchByGroup()
                     if (viewModel.refresh()) {
                         viewModel.startSearch()
                     }
@@ -414,7 +413,9 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                 menu.removeGroup(R.id.source_group)
                 val allItem = menu.add(R.id.source_group, Menu.NONE, Menu.NONE, R.string.all_source)
                 var hasSelectedGroup = false
-                groups.forEach { group ->
+                ChangeBookSourceViewModel.defaultSearchGroups.plus(groups)
+                    .distinct()
+                    .forEach { group ->
                     menu.add(R.id.source_group, Menu.NONE, Menu.NONE, group)?.let {
                         if (group == selectedGroup) {
                             it.isChecked = true
@@ -427,7 +428,11 @@ class ChangeBookSourceDialog() : BaseDialogFragment(R.layout.dialog_book_change_
                     title = getString(R.string.group) + "(" + AppConfig.searchGroup + ")"
                 } else {
                     allItem.isChecked = true
-                    title = getString(R.string.group)
+                    title = if (selectedGroup.isEmpty()) {
+                        getString(R.string.group)
+                    } else {
+                        getString(R.string.group) + "($selectedGroup)"
+                    }
                 }
             }
         }

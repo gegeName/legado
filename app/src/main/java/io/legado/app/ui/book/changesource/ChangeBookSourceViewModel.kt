@@ -9,6 +9,8 @@ import io.legado.app.base.BaseViewModel
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
 import io.legado.app.constant.AppPattern
+import io.legado.app.constant.BookSourceType
+import io.legado.app.constant.BookType
 import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
@@ -29,7 +31,6 @@ import io.legado.app.utils.internString
 import io.legado.app.utils.mapParallel
 import io.legado.app.utils.mapParallelSafe
 import io.legado.app.utils.onEachIndexed
-import io.legado.app.utils.splitNotBlank
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers.IO
@@ -172,28 +173,12 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     private fun applyOriginSearchGroup() {
         if (originGroupApplied) return
         originGroupApplied = true
-        val sourceOrigin = origin ?: return
-        val source = appDb.bookSourceDao.getBookSource(sourceOrigin) ?: return
-        val sourceGroups = source.bookSourceGroup
-            ?.splitNotBlank(AppPattern.splitGroupRegex)
-            ?.toList()
-            .orEmpty()
-        if (sourceGroups.isEmpty()) {
-            originSourceType = source.bookSourceType
-            AppConfig.searchGroup = ""
-            return
-        }
-        if (AppConfig.searchGroup in sourceGroups) return
-        val enabledGroup = sourceGroups.firstOrNull {
-            appDb.bookSourceDao.getEnabledPartByGroup(it).isNotEmpty()
-        }
-        if (enabledGroup != null) {
-            originSourceType = null
-            AppConfig.searchGroup = enabledGroup
-        } else {
-            originSourceType = source.bookSourceType
-            AppConfig.searchGroup = ""
-        }
+        val sourceType = origin
+            ?.let { appDb.bookSourceDao.getBookSource(it)?.bookSourceType }
+            ?: oldBook?.type?.toBookSourceType()
+            ?: return
+        originSourceType = sourceType
+        AppConfig.searchGroup = defaultGroupForSourceType(sourceType).orEmpty()
     }
 
     private fun initSearchPool() {
@@ -227,7 +212,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             tocMapChapterCount = 0
             _changeSourceProgress.value = 0 to ""
             val searchGroup = AppConfig.searchGroup
-            val sourceType = originSourceType
+            val sourceType = currentSearchSourceType()
             if (sourceType != null) {
                 bookSourceParts.addAll(appDb.bookSourceDao.getEnabledPartByType(sourceType))
             } else if (searchGroup.isBlank()) {
@@ -433,7 +418,7 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
     }
 
     private fun getDbSearchBooks(): List<SearchBook> {
-        val sourceType = originSourceType
+        val sourceType = currentSearchSourceType()
         return if (screenKey.isEmpty()) {
             if (AppConfig.changeSourceCheckAuthor) {
                 if (sourceType != null) {
@@ -465,8 +450,20 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
     }
 
+    fun selectSearchGroup(group: String) {
+        AppConfig.searchGroup = group
+        originSourceType = sourceTypeForDefaultGroup(group)
+    }
+
     fun searchByGroup() {
-        originSourceType = null
+        originSourceType = sourceTypeForDefaultGroup(AppConfig.searchGroup)
+    }
+
+    private fun currentSearchSourceType(): Int? {
+        val searchGroup = AppConfig.searchGroup
+        val sourceType = sourceTypeForDefaultGroup(searchGroup)
+        originSourceType = sourceType
+        return sourceType
     }
 
     /**
@@ -624,6 +621,45 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
 
         fun upAdapter()
 
+    }
+
+    private fun Int.toBookSourceType(): Int? {
+        return when {
+            this and BookType.image != 0 -> BookSourceType.image
+            this and BookType.audio != 0 -> BookSourceType.audio
+            this and BookType.text != 0 -> BookSourceType.default
+            else -> null
+        }
+    }
+
+    companion object {
+        const val DEFAULT_TEXT_GROUP = "默认小说"
+        const val DEFAULT_IMAGE_GROUP = "默认漫画"
+        const val DEFAULT_AUDIO_GROUP = "默认听书"
+
+        val defaultSearchGroups = listOf(
+            DEFAULT_TEXT_GROUP,
+            DEFAULT_IMAGE_GROUP,
+            DEFAULT_AUDIO_GROUP
+        )
+
+        fun sourceTypeForDefaultGroup(group: String): Int? {
+            return when (group) {
+                DEFAULT_TEXT_GROUP -> BookSourceType.default
+                DEFAULT_IMAGE_GROUP -> BookSourceType.image
+                DEFAULT_AUDIO_GROUP -> BookSourceType.audio
+                else -> null
+            }
+        }
+
+        fun defaultGroupForSourceType(sourceType: Int): String? {
+            return when (sourceType) {
+                BookSourceType.default -> DEFAULT_TEXT_GROUP
+                BookSourceType.image -> DEFAULT_IMAGE_GROUP
+                BookSourceType.audio -> DEFAULT_AUDIO_GROUP
+                else -> null
+            }
+        }
     }
 
 }

@@ -18,6 +18,7 @@ import io.legado.app.databinding.DialogSearchScopeBinding
 import io.legado.app.databinding.ItemCheckBoxBinding
 import io.legado.app.databinding.ItemRadioButtonBinding
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.ui.book.changesource.ChangeBookSourceViewModel
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.flowWithLifecycleAndDatabaseChange
 import io.legado.app.utils.setLayout
@@ -109,7 +110,9 @@ class SearchScopeDialog : BaseDialogFragment(R.layout.dialog_search_scope) {
     private fun initData() {
         lifecycleScope.launch {
             groups = withContext(IO) {
-                appDb.bookSourceDao.allEnabledGroups()
+                ChangeBookSourceViewModel.defaultSearchGroups
+                    .plus(appDb.bookSourceDao.allEnabledGroups())
+                    .distinct()
             }
             upData()
         }

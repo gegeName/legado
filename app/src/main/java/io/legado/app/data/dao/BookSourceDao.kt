@@ -115,6 +115,16 @@ interface BookSourceDao {
     fun flowExplore(key: String): Flow<List<BookSourcePart>>
 
     @Query(
+        """select bp.*
+        from book_sources b join book_sources_part bp on b.bookSourceUrl = bp.bookSourceUrl
+        where bp.enabledExplore = 1
+        and bp.hasExploreUrl = 1
+        and b.bookSourceType = :type
+        order by b.customOrder asc"""
+    )
+    fun flowExploreByType(type: Int): Flow<List<BookSourcePart>>
+
+    @Query(
         """select * from book_sources_part 
         where enabledExplore = 1 
         and hasExploreUrl = 1 
