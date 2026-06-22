@@ -10,12 +10,17 @@ import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.SearchBook
 import io.legado.app.databinding.ItemSearchBinding
 import io.legado.app.help.config.AppConfig
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.visible
 
 
 class ExploreShowAdapter(context: Context, val callBack: CallBack) :
     RecyclerAdapter<SearchBook, ItemSearchBinding>(context) {
+
+    private val summaryTextColor by lazy {
+        context.getCompatColor(R.color.tv_text_summary)
+    }
 
     override fun getViewBinding(parent: ViewGroup): ItemSearchBinding {
         return ItemSearchBinding.inflate(inflater, parent, false)
@@ -42,14 +47,17 @@ class ExploreShowAdapter(context: Context, val callBack: CallBack) :
         binding.run {
             tvName.text = item.name
             tvAuthor.text = context.getString(R.string.author_show, item.author)
+            tvAuthor.setTextColor(summaryTextColor)
             ivInBookshelf.isVisible = callBack.isInBookshelf(item)
             if (item.latestChapterTitle.isNullOrEmpty()) {
                 tvLasted.gone()
             } else {
                 tvLasted.text = context.getString(R.string.lasted_show, item.latestChapterTitle)
+                tvLasted.setTextColor(summaryTextColor)
                 tvLasted.visible()
             }
             tvIntroduce.text = item.trimIntro(context)
+            tvIntroduce.setTextColor(summaryTextColor)
             val kinds = item.getKindList()
             if (kinds.isEmpty()) {
                 llKind.gone()
