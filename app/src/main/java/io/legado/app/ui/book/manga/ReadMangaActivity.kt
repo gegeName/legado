@@ -591,23 +591,15 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
     override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_change_source -> {
-                binding.mangaMenu.runMenuOut()
-                ReadManga.book?.let {
-                    showDialogFragment(ChangeBookSourceDialog(it.name, it.author, it.origin))
-                }
+                openChangeSource()
             }
 
             R.id.menu_catalog -> {
-                ReadManga.book?.let {
-                    tocActivity.launch(it.bookUrl)
-                }
+                openCatalog()
             }
 
             R.id.menu_refresh -> {
-                binding.flLoading.isVisible = true
-                ReadManga.book?.let {
-                    viewModel.refreshContentDur(it)
-                }
+                refreshContent()
             }
 
             R.id.menu_pre_manga_number -> {
@@ -751,6 +743,28 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 putExtra("name", it.name)
                 putExtra("author", it.author)
             }
+        }
+    }
+
+    override fun openChangeSource() {
+        binding.mangaMenu.runMenuOut()
+        ReadManga.book?.let {
+            showDialogFragment(ChangeBookSourceDialog(it.name, it.author, it.origin))
+        }
+    }
+
+    override fun openCatalog() {
+        binding.mangaMenu.runMenuOut()
+        ReadManga.book?.let {
+            tocActivity.launch(it.bookUrl)
+        }
+    }
+
+    override fun refreshContent() {
+        binding.mangaMenu.runMenuOut()
+        binding.flLoading.isVisible = true
+        ReadManga.book?.let {
+            viewModel.refreshContentDur(it)
         }
     }
 

@@ -4,7 +4,9 @@
     tools:context=".ui.main.MainActivity"
     tools:ignore="AlwaysShowAction">
 
-    <group android:id="@+id/menu_group_on_line">
+    <group
+        android:id="@+id/menu_group_on_line"
+        android:visible="false">
         <item
             android:id="@+id/menu_change_source"
             android:icon="@drawable/ic_exchange"
