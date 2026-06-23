@@ -5,6 +5,7 @@ import android.os.Bundle
 import android.view.ViewGroup
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.adapter.DiffRecyclerAdapter
 import io.legado.app.base.adapter.ItemViewHolder
@@ -32,10 +33,25 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
             }
 
             override fun areContentsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
-                return false
+                return oldItem.origins.size == newItem.origins.size
+                        && oldItem.bookUrl == newItem.bookUrl
+                        && oldItem.origin == newItem.origin
+                        && oldItem.originName == newItem.originName
+                        && oldItem.type == newItem.type
+                        && oldItem.coverUrl == newItem.coverUrl
+                        && oldItem.kind == newItem.kind
+                        && oldItem.latestChapterTitle == newItem.latestChapterTitle
+                        && oldItem.intro == newItem.intro
             }
 
-            override fun getChangePayload(oldItem: SearchBook, newItem: SearchBook): Any {
+            override fun getChangePayload(oldItem: SearchBook, newItem: SearchBook): Any? {
+                if (oldItem.bookUrl != newItem.bookUrl
+                    || oldItem.origin != newItem.origin
+                    || oldItem.originName != newItem.originName
+                    || oldItem.type != newItem.type
+                ) {
+                    return null
+                }
                 val payload = Bundle()
                 payload.putInt("origins", newItem.origins.size)
                 if (oldItem.coverUrl != newItem.coverUrl)
@@ -73,7 +89,11 @@ class SearchAdapter(context: Context, val callBack: CallBack) :
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemSearchBinding) {
         binding.root.setOnClickListener {
-            getItem(holder.layoutPosition)?.let {
+            val position = holder.bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION) {
+                return@setOnClickListener
+            }
+            getItem(position)?.let {
                 callBack.showBookInfo(it.name, it.author, it.bookUrl)
             }
         }

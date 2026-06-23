@@ -32,6 +32,11 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
     var searchKey: String = ""
     var hasMore = true
     private var searchID = 0L
+    private var nextSearchID = 0L
+    @Volatile
+    private var searchRequesting = false
+    @Volatile
+    private var searchRequestToken = 0L
     private val searchModel = SearchModel(viewModelScope, object : SearchModel.CallBack {
 
         override fun getSearchScope(): SearchScope {
@@ -39,6 +44,7 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
         }
 
         override fun onSearchStart() {
+            searchRequesting = true
             isSearchLiveData.postValue(true)
         }
 
@@ -48,11 +54,13 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
 
         override fun onSearchFinish(isEmpty: Boolean, hasMore: Boolean) {
             this@SearchViewModel.hasMore = hasMore
+            searchRequesting = false
             isSearchLiveData.postValue(false)
             searchFinishLiveData.postValue(isEmpty)
         }
 
         override fun onSearchCancel(exception: Throwable?) {
+            searchRequesting = false
             isSearchLiveData.postValue(false)
             exception?.let {
                 context.toastOnUi(it.localizedMessage)
@@ -96,18 +104,48 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
      * 开始搜索
      */
     fun search(key: String) {
+        if (key.isEmpty() && searchKey.isEmpty()) {
+            searchRequestToken++
+            searchModel.close()
+            hasMore = false
+            searchRequesting = false
+            isSearchLiveData.postValue(false)
+            searchBookLiveData.postValue(emptyList())
+            return
+        }
+        val isLoadMore = key.isEmpty()
+        if (isLoadMore && searchRequesting) {
+            return
+        }
+        val requestSearchID = if (isLoadMore) searchID else ++nextSearchID
+        if (!isLoadMore) {
+            searchID = requestSearchID
+            searchKey = key
+            hasMore = true
+            searchBookLiveData.postValue(emptyList())
+        }
+        val requestToken = ++searchRequestToken
+        searchRequesting = true
         execute {
-            if ((searchKey == key) || key.isNotEmpty()) {
-                searchModel.cancelSearch()
-                searchID = System.currentTimeMillis()
-                searchBookLiveData.postValue(emptyList())
-                searchKey = key
-                hasMore = true
-            }
-            if (searchKey.isEmpty()) {
+            if (searchRequestToken != requestToken || searchID != requestSearchID) {
                 return@execute
             }
-            searchModel.search(searchID, searchKey)
+            if (!isLoadMore) {
+                searchModel.close()
+            }
+            if (searchKey.isEmpty()) {
+                if (searchRequestToken == requestToken && searchID == requestSearchID) {
+                    searchRequesting = false
+                }
+                return@execute
+            }
+            searchModel.search(requestSearchID, searchKey)
+        }.onError {
+            if (searchRequestToken == requestToken && searchID == requestSearchID) {
+                searchRequesting = false
+                isSearchLiveData.postValue(false)
+            }
+            AppLog.put("搜索启动失败\n${it.localizedMessage}", it)
         }
     }
 
@@ -115,7 +153,10 @@ class SearchViewModel(application: Application) : BaseViewModel(application) {
      * 停止搜索
      */
     fun stop() {
-        searchModel.cancelSearch()
+        searchRequestToken++
+        if (searchRequesting) {
+            searchModel.cancelSearch()
+        }
     }
 
     fun pause() {

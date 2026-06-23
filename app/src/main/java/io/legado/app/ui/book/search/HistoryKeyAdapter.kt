@@ -1,12 +1,12 @@
 package io.legado.app.ui.book.search
 
 import android.view.ViewGroup
+import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
 import io.legado.app.data.entities.SearchKeyword
 import io.legado.app.databinding.ItemFilletTextBinding
 import io.legado.app.ui.widget.anima.explosion_field.ExplosionField
-import splitties.views.onLongClick
 
 class HistoryKeyAdapter(activity: SearchActivity, val callBack: CallBack) :
     RecyclerAdapter<SearchKeyword, ItemFilletTextBinding>(activity) {
@@ -35,15 +35,24 @@ class HistoryKeyAdapter(activity: SearchActivity, val callBack: CallBack) :
     override fun registerListener(holder: ItemViewHolder, binding: ItemFilletTextBinding) {
         holder.itemView.apply {
             setOnClickListener {
-                getItemByLayoutPosition(holder.layoutPosition)?.let {
+                val position = holder.bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) {
+                    return@setOnClickListener
+                }
+                getItemByLayoutPosition(position)?.let {
                     callBack.searchHistory(it.word)
                 }
             }
-            onLongClick {
+            setOnLongClickListener {
+                val position = holder.bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) {
+                    return@setOnLongClickListener false
+                }
                 explosionField.explode(this, true)
-                getItemByLayoutPosition(holder.layoutPosition)?.let {
+                getItemByLayoutPosition(position)?.let {
                     callBack.deleteHistory(it)
                 }
+                true
             }
         }
     }

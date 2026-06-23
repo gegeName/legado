@@ -75,108 +75,116 @@ class SearchModel(private val scope: CoroutineScope, private val callBack: CallB
     }
 
     private fun startSearch() {
+        val searchId = mSearchId
+        val key = searchKey
+        val page = searchPage
+        val sourceParts = bookSourceParts
         val precision = appCtx.getPrefBoolean(PreferKey.precisionSearch)
         var hasMore = false
         searchJob = scope.launch(searchPool!!) {
             flow {
-                for (bs in bookSourceParts) {
+                for (bs in sourceParts) {
                     bs.getBookSource()?.let {
                         emit(it)
                     }
                     workingState.first { it }
                 }
             }.onStart {
-                callBack.onSearchStart()
+                if (searchId == mSearchId) {
+                    callBack.onSearchStart()
+                }
             }.mapParallelSafe(threadCount) {
                 withTimeout(30000L) {
                     WebBook.searchBookAwait(
-                        it, searchKey, searchPage,
+                        it, key, page,
                         filter = { name, author ->
-                            !precision || name.contains(searchKey) ||
-                                    author.contains(searchKey)
+                            !precision || name.contains(key) ||
+                                    author.contains(key)
                         })
                 }
             }.onEach { items ->
-                for (book in items) {
-                    book.releaseHtmlData()
+                if (searchId == mSearchId) {
+                    for (book in items) {
+                        book.releaseHtmlData()
+                    }
+                    hasMore = hasMore || items.isNotEmpty()
+                    appDb.searchBookDao.insert(*items.toTypedArray())
+                    mergeItems(items, precision, key)
+                    currentCoroutineContext().ensureActive()
+                    callBack.onSearchSuccess(searchBooks)
                 }
-                hasMore = hasMore || items.isNotEmpty()
-                appDb.searchBookDao.insert(*items.toTypedArray())
-                mergeItems(items, precision)
-                currentCoroutineContext().ensureActive()
-                callBack.onSearchSuccess(searchBooks)
             }.onCompletion {
-                if (it == null) callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                if (it == null && searchId == mSearchId) {
+                    callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                }
             }.catch {
                 AppLog.put("书源搜索出错\n${it.localizedMessage}", it)
+                if (searchId == mSearchId) {
+                    callBack.onSearchFinish(searchBooks.isEmpty(), hasMore)
+                }
             }.collect()
         }
     }
 
-    private suspend fun mergeItems(newDataS: List<SearchBook>, precision: Boolean) {
+    private suspend fun mergeItems(newDataS: List<SearchBook>, precision: Boolean, key: String) {
         if (newDataS.isNotEmpty()) {
-            val copyData = ArrayList(searchBooks)
-            val equalData = arrayListOf<SearchBook>()
-            val containsData = arrayListOf<SearchBook>()
-            val otherData = arrayListOf<SearchBook>()
-            copyData.forEach {
-                coroutineContext.ensureActive()
-                if (it.name == searchKey || it.author == searchKey) {
-                    equalData.add(it)
-                } else if (it.name.contains(searchKey) || it.author.contains(searchKey)) {
-                    containsData.add(it)
+            val merged = LinkedHashMap<String, SearchBook>(searchBooks.size + newDataS.size)
+            fun SearchBook.mergeKey(): String = "$name\u0000$author"
+            fun SearchBook.copyForMerge(): SearchBook {
+                return copy().also { book ->
+                    origins.forEach { book.addOrigin(it) }
+                }
+            }
+            fun putOrMerge(book: SearchBook) {
+                val oldBook = merged[book.mergeKey()]
+                if (oldBook == null) {
+                    merged[book.mergeKey()] = book.copyForMerge()
                 } else {
+                    book.origins.forEach { oldBook.addOrigin(it) }
+                }
+            }
+
+            searchBooks.forEach {
+                coroutineContext.ensureActive()
+                putOrMerge(it)
+            }
+            newDataS.forEach {
+                coroutineContext.ensureActive()
+                if (!precision
+                    || it.name == key
+                    || it.author == key
+                    || it.name.contains(key)
+                    || it.author.contains(key)
+                ) {
+                    putOrMerge(it)
+                }
+            }
+
+            coroutineContext.ensureActive()
+            val equalData = ArrayList<SearchBook>()
+            val containsData = ArrayList<SearchBook>()
+            val otherData = ArrayList<SearchBook>()
+            merged.values.forEach {
+                coroutineContext.ensureActive()
+                if (it.name == key || it.author == key) {
+                    equalData.add(it)
+                } else if (it.name.contains(key) || it.author.contains(key)) {
+                    containsData.add(it)
+                } else if (!precision) {
                     otherData.add(it)
                 }
             }
-            newDataS.forEach { nBook ->
-                coroutineContext.ensureActive()
-                if (nBook.name == searchKey || nBook.author == searchKey) {
-                    var hasSame = false
-                    equalData.forEach { pBook ->
-                        coroutineContext.ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        equalData.add(nBook)
-                    }
-                } else if (nBook.name.contains(searchKey) || nBook.author.contains(searchKey)) {
-                    var hasSame = false
-                    containsData.forEach { pBook ->
-                        coroutineContext.ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        containsData.add(nBook)
-                    }
-                } else if (!precision) {
-                    var hasSame = false
-                    otherData.forEach { pBook ->
-                        coroutineContext.ensureActive()
-                        if (pBook.name == nBook.name && pBook.author == nBook.author) {
-                            pBook.addOrigin(nBook.origin)
-                            hasSame = true
-                        }
-                    }
-                    if (!hasSame) {
-                        otherData.add(nBook)
-                    }
-                }
-            }
-            coroutineContext.ensureActive()
+
             equalData.sortByDescending { it.origins.size }
-            equalData.addAll(containsData.sortedByDescending { it.origins.size })
+            containsData.sortByDescending { it.origins.size }
+            val result = ArrayList<SearchBook>(merged.size)
+            result.addAll(equalData)
+            result.addAll(containsData)
             if (!precision) {
-                equalData.addAll(otherData)
+                result.addAll(otherData)
             }
             coroutineContext.ensureActive()
-            searchBooks = equalData
+            searchBooks = result
         }
     }
 
