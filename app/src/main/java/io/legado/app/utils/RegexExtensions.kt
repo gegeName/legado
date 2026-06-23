@@ -49,26 +49,27 @@ fun CharSequence.replace(regex: Regex, replacement: String, timeout: Long): Stri
                             }
                         }
                         matcher.appendTail(stringBuffer)
-                        block.resume(stringBuffer.toString())
+                        if (block.isActive) {
+                            block.resume(stringBuffer.toString())
+                        }
                     } catch (e: Exception) {
-                        block.resumeWithException(e)
+                        if (block.isActive) {
+                            block.resumeWithException(e)
+                        }
                     }
                 }
                 select {
                     job.onJoin {}
                     onTimeout(timeout) {
                         val timeoutMsg =
-                            "替换超时,3秒后还未结束将重启应用\n替换规则$regex\n替换内容:$charSequence"
+                            "替换超时,已停止本次替换\n替换规则$regex\n替换内容:$charSequence"
                         val exception = RegexTimeoutException(timeoutMsg)
-                        block.cancel(exception)
+                        job.cancel()
+                        if (block.isActive) {
+                            block.resumeWithException(exception)
+                        }
                         appCtx.longToastOnUi(timeoutMsg)
                         CrashHandler.saveCrashInfo2File(exception)
-                        select {
-                            job.onJoin {}
-                            onTimeout(3000) {
-                                appCtx.restart()
-                            }
-                        }
                     }
                 }
             }

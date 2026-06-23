@@ -5,7 +5,6 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.ReplaceRule
 import io.legado.app.utils.GSON
 import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.replace
 import io.legado.app.utils.stackTraceStr
 
 object ReplaceRuleController {
@@ -77,15 +76,7 @@ object ReplaceRuleController {
             }
             val text = map["text"] as String
             val content = try {
-                if (rule.isRegex) {
-                    text.replace(
-                        rule.pattern.toRegex(),
-                        rule.replacement,
-                        rule.getValidTimeoutMillisecond()
-                    )
-                } else {
-                    text.replace(rule.pattern, rule.replacement)
-                }
+                rule.replaceIn(text)
             } catch (e: Exception) {
                 e.stackTraceStr
             }

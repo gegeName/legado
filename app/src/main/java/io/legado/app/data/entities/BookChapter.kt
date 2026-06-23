@@ -19,7 +19,6 @@ import io.legado.app.utils.GSON
 import io.legado.app.utils.MD5Utils
 import io.legado.app.utils.NetworkUtils
 import io.legado.app.utils.fromJsonObject
-import io.legado.app.utils.replace
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import kotlinx.parcelize.IgnoredOnParcel
@@ -113,15 +112,7 @@ data class BookChapter(
             replaceRules.forEach { item ->
                 if (item.pattern.isNotEmpty()) {
                     try {
-                        val mDisplayTitle = if (item.isRegex) {
-                            displayTitle.replace(
-                                item.regex,
-                                item.replacement,
-                                item.getValidTimeoutMillisecond()
-                            )
-                        } else {
-                            displayTitle.replace(item.pattern, item.replacement)
-                        }
+                        val mDisplayTitle = item.replaceIn(displayTitle)
                         if (mDisplayTitle.isNotBlank()) {
                             displayTitle = mDisplayTitle
                         }

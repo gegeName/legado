@@ -322,6 +322,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                     } else {
                         loadMoreView.startLoad()
                     }
+                    refreshLoadMoreFooter()
                 }
             }
         }
@@ -510,6 +511,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 binding.tvMsg.text = msg
             } else {
                 loadMoreView.error(null, "加载失败，点击重试")
+                refreshLoadMoreFooter()
             }
         }
     }
@@ -543,7 +545,15 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
 
     override fun startLoad() {
         lifecycleScope.launch {
-            loadMoreView.startLoad()
+            loadMoreView.visible()
+            loadMoreView.hasMore()
+            refreshLoadMoreFooter()
+        }
+    }
+
+    private fun refreshLoadMoreFooter() {
+        if (mAdapter.getFooterCount() > 0) {
+            mAdapter.notifyItemChanged(mAdapter.getActualItemCount())
         }
     }
 

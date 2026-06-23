@@ -12,8 +12,6 @@ import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ReadBookConfig
 import io.legado.app.utils.ChineseUtils
 import io.legado.app.utils.escapeRegex
-import io.legado.app.utils.replace
-import io.legado.app.utils.stackTraceStr
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.CancellationException
 import splitties.init.appCtx
@@ -147,28 +145,20 @@ class ContentProcessor private constructor(
                 //替换
                 effectiveReplaceRules = arrayListOf()
                 mContent = mContent.lines().joinToString("\n") { it.trim() }
-                getContentReplaceRules().forEach { item ->
+                for (item in getContentReplaceRules()) {
                     if (item.pattern.isEmpty()) {
-                        return@forEach
+                        continue
                     }
                     try {
-                        val tmp = if (item.isRegex) {
-                            mContent.replace(
-                                item.regex,
-                                item.replacement,
-                                item.getValidTimeoutMillisecond()
-                            )
-                        } else {
-                            mContent.replace(item.pattern, item.replacement)
-                        }
+                        val tmp = item.replaceIn(mContent)
                         if (mContent != tmp) {
                             effectiveReplaceRules.add(item)
                             mContent = tmp
                         }
-                    } catch (e: RegexTimeoutException) {
+                    } catch (_: RegexTimeoutException) {
                         item.isEnabled = false
                         appDb.replaceRuleDao.update(item)
-                        mContent = item.name + e.stackTraceStr
+                        continue
                     } catch (_: CancellationException) {
                     } catch (e: Exception) {
                         AppLog.put("替换净化: 规则 ${item.name}替换出错.\n${mContent}", e)
