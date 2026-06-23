@@ -4,6 +4,7 @@ data class MangaPage(
     override val chapterIndex: Int = 0,//总章节位置
     val chapterSize: Int,//总章节数量
     val mImageUrl: String = "",//当前URL
+    val cacheImagePath: String? = null,//已下载解密后的本地图片
     override val index: Int = 0,//当前章节位置
     var imageCount: Int = 0,//当前章节内容总数
     val mChapterName: String = "",//章节名称

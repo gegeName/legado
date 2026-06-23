@@ -57,6 +57,8 @@ object ReadManga : CoroutineScope by MainScope() {
     var readStartTime: Long = System.currentTimeMillis()
     private val readRecord = ReadRecord()
     private val loadingChapters = arrayListOf<Int>()
+    private val cachingImageJobs = hashMapOf<Int, Job>()
+    private var lastClearImageCacheChapterIndex = Int.MIN_VALUE
     var simulatedChapterSize = 0
     var mCallback: Callback? = null
     var preDownloadTask: Job? = null
@@ -82,6 +84,8 @@ object ReadManga : CoroutineScope by MainScope() {
         durChapterPos = book.durChapterPos
         clearMangaChapter()
         upWebBook(book)
+        cancelAllImageCacheJobs()
+        lastClearImageCacheChapterIndex = Int.MIN_VALUE
         synchronized(this) {
             loadingChapters.clear()
             downloadedChapters.clear()
@@ -104,6 +108,8 @@ object ReadManga : CoroutineScope by MainScope() {
             clearMangaChapter()
         }
         upWebBook(book)
+        cancelAllImageCacheJobs()
+        lastClearImageCacheChapterIndex = Int.MIN_VALUE
         synchronized(this) {
             loadingChapters.clear()
             downloadedChapters.clear()
@@ -151,8 +157,77 @@ object ReadManga : CoroutineScope by MainScope() {
         loadingChapters.remove(index)
     }
 
+    private fun isChapterDownloaded(index: Int): Boolean = synchronized(this) {
+        downloadedChapters.contains(index)
+    }
+
+    private fun markChapterDownloaded(index: Int) = synchronized(this) {
+        downloadedChapters.add(index)
+    }
+
+    private fun pruneDownloadedChapters() = synchronized(this) {
+        downloadedChapters.removeAll { !isChapterInImageCacheWindow(it) }
+    }
+
+    private fun getDownloadFailCount(index: Int): Int = synchronized(this) {
+        downloadFailChapters[index] ?: 0
+    }
+
+    private fun clearDownloadFail(index: Int) = synchronized(this) {
+        downloadFailChapters.remove(index)
+    }
+
+    private fun incrementDownloadFail(index: Int) = synchronized(this) {
+        downloadFailChapters[index] = (downloadFailChapters[index] ?: 0) + 1
+    }
+
+    private fun putImageCacheJob(index: Int, job: Job): Boolean = synchronized(this) {
+        if (cachingImageJobs.containsKey(index)) {
+            false
+        } else {
+            cachingImageJobs[index] = job
+            true
+        }
+    }
+
+    private fun removeImageCacheJob(index: Int, job: Job) = synchronized(this) {
+        if (cachingImageJobs[index] === job) {
+            cachingImageJobs.remove(index)
+        }
+    }
+
+    private fun cancelStaleImageCacheJobs() {
+        val staleJobs = synchronized(this) {
+            val stale = cachingImageJobs
+                .filterKeys { !isChapterInImageCacheWindow(it) }
+                .values
+                .toList()
+            cachingImageJobs.entries.removeAll { !isChapterInImageCacheWindow(it.key) }
+            stale
+        }
+        pruneDownloadedChapters()
+        staleJobs.forEach { it.cancel() }
+    }
+
+    private fun cancelAllImageCacheJobs() {
+        val jobs = synchronized(this) {
+            val jobs = cachingImageJobs.values.toList()
+            cachingImageJobs.clear()
+            jobs
+        }
+        jobs.forEach { it.cancel() }
+    }
+
     fun loadContent() {
         clearMangaChapter()
+        preDownloadTask?.cancel()
+        preDownloadTask = null
+        cancelAllImageCacheJobs()
+        downloadScope.coroutineContext.cancelChildren()
+        synchronized(this) {
+            loadingChapters.clear()
+        }
+        clearExpiredImageCacheIfNeeded()
         loadContent(durChapterIndex)
         loadContent(durChapterIndex + 1)
         loadContent(durChapterIndex - 1)
@@ -178,6 +253,9 @@ object ReadManga : CoroutineScope by MainScope() {
             val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return@async
             if (addLoading(index)) {
                 BookHelp.getContent(book, chapter)?.let {
+                    bookSource?.let { bookSource ->
+                        cacheChapterImagesAsync(bookSource, book, chapter, it)
+                    }
                     contentLoadFinish(chapter, it)
                 } ?: run {
                     download(downloadScope, chapter)
@@ -280,6 +358,8 @@ object ReadManga : CoroutineScope by MainScope() {
             prevMangaChapter = curMangaChapter
             curMangaChapter = nextMangaChapter
             nextMangaChapter = null
+            cancelStaleImageCacheJobs()
+            clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
                 mCallback?.startLoad()
                 loadContent(durChapterIndex)
@@ -310,6 +390,8 @@ object ReadManga : CoroutineScope by MainScope() {
             nextMangaChapter = curMangaChapter
             curMangaChapter = prevMangaChapter
             prevMangaChapter = null
+            cancelStaleImageCacheJobs()
+            clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
                 loadContent(durChapterIndex)
             } else {
@@ -324,6 +406,7 @@ object ReadManga : CoroutineScope by MainScope() {
 
     fun curPageChanged() {
         upReadTime()
+        clearExpiredImageCacheIfNeeded()
         preDownload()
     }
 
@@ -381,7 +464,8 @@ object ReadManga : CoroutineScope by MainScope() {
     private fun preDownload() {
         if (book?.isLocal == true) return
         executor.execute {
-            if (AppConfig.preDownloadNum < 2) {
+            cancelStaleImageCacheJobs()
+            if (AppConfig.mangaPreDownloadNum < 2) {
                 upToc()
                 return@execute
             }
@@ -390,18 +474,18 @@ object ReadManga : CoroutineScope by MainScope() {
                 //预下载
                 launch {
                     val maxChapterIndex =
-                        min(durChapterIndex + AppConfig.preDownloadNum, chapterSize)
+                        min(durChapterIndex + AppConfig.mangaPreDownloadNum, chapterSize)
                     for (i in durChapterIndex.plus(2)..maxChapterIndex) {
-                        if (downloadedChapters.contains(i)) continue
-                        if ((downloadFailChapters[i] ?: 0) >= 3) continue
+                        if (isChapterDownloaded(i)) continue
+                        if (getDownloadFailCount(i) >= 3) continue
                         downloadIndex(i)
                     }
                 }
                 launch {
-                    val minChapterIndex = durChapterIndex - min(5, AppConfig.preDownloadNum)
+                    val minChapterIndex = durChapterIndex - min(5, AppConfig.mangaPreDownloadNum)
                     for (i in durChapterIndex.minus(2) downTo minChapterIndex) {
-                        if (downloadedChapters.contains(i)) continue
-                        if ((downloadFailChapters[i] ?: 0) >= 3) continue
+                        if (isChapterDownloaded(i)) continue
+                        if (getDownloadFailCount(i) >= 3) continue
                         downloadIndex(i)
                     }
                 }
@@ -409,9 +493,29 @@ object ReadManga : CoroutineScope by MainScope() {
         }
     }
 
+    private fun isChapterInImageCacheWindow(index: Int): Boolean {
+        val preDownloadNum = AppConfig.mangaPreDownloadNum
+        val minChapterIndex = durChapterIndex - min(5, preDownloadNum)
+        val maxChapterIndex = durChapterIndex + preDownloadNum
+        return index in minChapterIndex..maxChapterIndex
+    }
+
+    private fun clearExpiredImageCacheIfNeeded() {
+        if (lastClearImageCacheChapterIndex == durChapterIndex) {
+            return
+        }
+        val book = book ?: return
+        val chapterIndex = durChapterIndex
+        lastClearImageCacheChapterIndex = chapterIndex
+        executor.execute {
+            BookHelp.clearComicCache(book, chapterIndex)
+        }
+    }
+
     fun cancelPreDownloadTask() {
         if (curMangaChapter != null && nextMangaChapter != null) {
             preDownloadTask?.cancel()
+            cancelAllImageCacheJobs()
             downloadScope.coroutineContext.cancelChildren()
         }
     }
@@ -425,7 +529,13 @@ object ReadManga : CoroutineScope by MainScope() {
         val book = book ?: return
         val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, index) ?: return
         if (BookHelp.hasContent(book, chapter)) {
-            downloadedChapters.add(chapter.index)
+            val content = BookHelp.getContent(book, chapter)
+            if (content != null && !BookHelp.hasImageContent(book, chapter)) {
+                cacheChapterImagesAwait(book, chapter, content)
+            }
+            if (BookHelp.hasImageContent(book, chapter)) {
+                markChapterDownloaded(chapter.index)
+            }
         } else {
             delay(1000)
             if (addLoading(index)) {
@@ -446,12 +556,14 @@ object ReadManga : CoroutineScope by MainScope() {
         val bookSource = bookSource
         if (bookSource != null) {
             downloadNetworkContent(bookSource, scope, chapter, book, semaphore, success = {
-                downloadedChapters.add(chapter.index)
-                downloadFailChapters.remove(chapter.index)
+                cacheChapterImagesAfterContentLoad(bookSource, book, chapter, it)
+                if (BookHelp.hasImageContent(book, chapter)) {
+                    markChapterDownloaded(chapter.index)
+                }
+                clearDownloadFail(chapter.index)
                 contentLoadFinish(chapter, it)
             }, error = {
-                downloadFailChapters[chapter.index] =
-                    (downloadFailChapters[chapter.index] ?: 0) + 1
+                incrementDownloadFail(chapter.index)
                 contentLoadFinish(chapter, null)
             }, cancel = {
                 contentLoadFinish(chapter, null, canceled = true)
@@ -459,6 +571,76 @@ object ReadManga : CoroutineScope by MainScope() {
         } else {
             contentLoadFinish(chapter, null, "加载内容失败 没有书源")
         }
+    }
+
+    private suspend fun cacheChapterImagesAfterContentLoad(
+        bookSource: BookSource,
+        book: Book,
+        chapter: BookChapter,
+        content: String
+    ) {
+        if (!isChapterInImageCacheWindow(chapter.index)) {
+            return
+        }
+        if (chapter.index in durChapterIndex - 1..durChapterIndex + 1) {
+            cacheChapterImagesAsync(bookSource, book, chapter, content)
+        } else {
+            BookHelp.saveImages(
+                bookSource,
+                book,
+                chapter,
+                content,
+                1
+            ) { isChapterInImageCacheWindow(chapter.index) }
+        }
+    }
+
+    private fun cacheChapterImagesAsync(
+        bookSource: BookSource,
+        book: Book,
+        chapter: BookChapter,
+        content: String
+    ) {
+        if (!isChapterInImageCacheWindow(chapter.index)) {
+            return
+        }
+        lateinit var job: Job
+        job = downloadScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                BookHelp.saveImages(
+                    bookSource,
+                    book,
+                    chapter,
+                    content,
+                    1
+                ) { isChapterInImageCacheWindow(chapter.index) }
+            } finally {
+                removeImageCacheJob(chapter.index, job)
+            }
+        }
+        if (putImageCacheJob(chapter.index, job)) {
+            job.start()
+        } else {
+            job.cancel()
+        }
+    }
+
+    private suspend fun cacheChapterImagesAwait(
+        book: Book,
+        chapter: BookChapter,
+        content: String
+    ) {
+        val bookSource = this.bookSource ?: return
+        if (!isChapterInImageCacheWindow(chapter.index)) {
+            return
+        }
+        BookHelp.saveImages(
+            bookSource,
+            book,
+            chapter,
+            content,
+            1
+        ) { isChapterInImageCacheWindow(chapter.index) }
     }
 
     @Synchronized
@@ -593,17 +775,21 @@ object ReadManga : CoroutineScope by MainScope() {
         }
         preDownloadTask?.cancel()
         preDownloadTask = null
+        cancelAllImageCacheJobs()
         downloadScope.coroutineContext.cancelChildren()
         coroutineContext.cancelChildren()
     }
 
     private suspend fun getManageChapter(chapter: BookChapter, content: String): MangaChapter {
+        val book = this.book
         val list = BookHelp.flowImages(chapter, content)
             .distinctUntilChanged().mapIndexed { index, src ->
+                val cacheImage = book?.let { BookHelp.getImage(it, src) }
                 MangaPage(
                     chapterIndex = chapter.index,
                     chapterSize = chapterSize,
                     mImageUrl = src,
+                    cacheImagePath = cacheImage?.takeIf { it.exists() }?.absolutePath,
                     index = index,
                     mChapterName = chapter.title
                 )

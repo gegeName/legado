@@ -32,6 +32,7 @@ import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.databinding.ActivityMangaBinding
 import io.legado.app.databinding.ViewLoadMoreBinding
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.isImage
 import io.legado.app.help.book.removeType
 import io.legado.app.help.config.AppConfig
@@ -75,6 +76,7 @@ import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 import java.text.DecimalFormat
 import kotlin.math.ceil
 
@@ -384,7 +386,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         var index = start
         while (index != end + step) {
             val page = list.getOrNull(index) as? MangaPage
-            val imageUrl = page?.mImageUrl
+            val imageUrl = page?.let { getCacheImagePath(it) ?: it.mImageUrl }
             if (!imageUrl.isNullOrBlank() && preloadedImageUrls.add(imageUrl)) {
                 if (preloadedImageUrls.size > 96) {
                     preloadedImageUrls.clear()
@@ -399,6 +401,18 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             }
             index += step
         }
+    }
+
+    private fun getCacheImagePath(page: MangaPage): String? {
+        page.cacheImagePath?.let {
+            if (File(it).exists()) {
+                return it
+            }
+        }
+        val book = ReadManga.book ?: return null
+        return BookHelp.getImage(book, page.mImageUrl)
+            .takeIf { it.exists() }
+            ?.absolutePath
     }
 
     private fun resetPreloadCacheIfNeeded(list: List<Any>) {

@@ -23,6 +23,7 @@ import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter.Companion.TYPE_FOOTER_VIEW
 import io.legado.app.databinding.ItemBookMangaEdgeBinding
 import io.legado.app.databinding.ItemBookMangaPageBinding
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.glide.progress.ProgressManager
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
@@ -32,6 +33,7 @@ import io.legado.app.ui.book.manga.entities.GrayscaleTransformation
 import io.legado.app.ui.book.manga.entities.MangaPage
 import io.legado.app.ui.book.manga.entities.ReaderLoading
 import io.legado.app.utils.dpToPx
+import java.io.File
 
 
 class MangaAdapter(private val context: Context) :
@@ -97,10 +99,18 @@ class MangaAdapter(private val context: Context) :
                 binding.flProgress
             )
             binding.retry.setOnClickListener {
-                val item = mDiffer.currentList[layoutPosition]
+                val position = bindingAdapterPosition
+                if (position == RecyclerView.NO_POSITION) {
+                    return@setOnClickListener
+                }
+                val item = mDiffer.currentList.getOrNull(position)
                 if (item is MangaPage) {
                     loadImageWithRetry(
-                        item.mImageUrl, isHorizontal, mTransformation, forceReload = true
+                        item.mImageUrl,
+                        getCacheImagePath(item),
+                        isHorizontal,
+                        mTransformation,
+                        forceReload = true
                     )
                 }
             }
@@ -108,7 +118,12 @@ class MangaAdapter(private val context: Context) :
 
         fun onBind(item: MangaPage) {
             setImageColorFilter()
-            loadImageWithRetry(item.mImageUrl, isHorizontal, mTransformation)
+            loadImageWithRetry(
+                item.mImageUrl,
+                getCacheImagePath(item),
+                isHorizontal,
+                mTransformation
+            )
         }
 
         fun setImageColorFilter() {
@@ -241,12 +256,24 @@ class MangaAdapter(private val context: Context) :
         if (item is MangaPage) {
             return BookCover.preloadManga(
                 context,
-                item.mImageUrl,
+                getCacheImagePath(item) ?: item.mImageUrl,
                 sourceOrigin = ReadManga.book?.origin,
                 transformation = mTransformation,
             )
         }
         return null
+    }
+
+    private fun getCacheImagePath(item: MangaPage): String? {
+        item.cacheImagePath?.let {
+            if (File(it).exists()) {
+                return it
+            }
+        }
+        val book = ReadManga.book ?: return null
+        return BookHelp.getImage(book, item.mImageUrl)
+            .takeIf { it.exists() }
+            ?.absolutePath
     }
 
     fun setMangaImageColorFilter(config: MangaColorFilterConfig) {

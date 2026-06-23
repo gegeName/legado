@@ -26,6 +26,7 @@ import io.legado.app.help.glide.progress.ProgressManager
 import io.legado.app.model.BookCover
 import io.legado.app.model.ReadManga
 import io.legado.app.utils.printOnDebug
+import java.io.File
 
 open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Context) :
     RecyclerView.ViewHolder(binding.root) {
@@ -58,28 +59,33 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
     @SuppressLint("CheckResult")
     fun loadImageWithRetry(
         imageUrl: String,
+        cacheImagePath: String?,
         isHorizontal: Boolean,
         transformation: Transformation<Bitmap>?,
         forceReload: Boolean = false
     ) {
-        if (!forceReload && loadingUrl == imageUrl && (mFlProgress.isGone || mRetry?.isVisible != true)) {
+        val loadPath = cacheImagePath ?: imageUrl
+        if (!forceReload && loadingUrl == loadPath && (mFlProgress.isGone || mRetry?.isVisible != true)) {
             return
         }
-        loadingUrl = imageUrl
-        mFlProgress.isVisible = true
-        mLoading.isVisible = true
+        loadingUrl = loadPath
+        val showProgress = cacheImagePath == null
+        mFlProgress.isVisible = showProgress
+        mLoading.isVisible = showProgress
         mRetry?.isGone = true
-        mProgress.isVisible = true
+        mProgress.isVisible = showProgress
         ProgressManager.removeListener(imageUrl)
-        ProgressManager.addListener(imageUrl) { _, percentage, _, _ ->
-            @SuppressLint("SetTextI18n")
-            mProgress.text = "$percentage%"
+        if (showProgress) {
+            ProgressManager.addListener(imageUrl) { _, percentage, _, _ ->
+                @SuppressLint("SetTextI18n")
+                mProgress.text = "$percentage%"
+            }
         }
         try {
             mImage.tag = imageUrl
             BookCover.loadManga(
                 context,
-                imageUrl,
+                loadPath,
                 sourceOrigin = ReadManga.book?.origin,
                 transformation = transformation
             ).addListener(object : RequestListener<Drawable> {
@@ -89,6 +95,11 @@ open class MangaVH<VB : ViewBinding>(val binding: VB, private val context: Conte
                     target: Target<Drawable>,
                     isFirstResource: Boolean,
                 ): Boolean {
+                    if (cacheImagePath != null) {
+                        File(cacheImagePath).delete()
+                        loadImageWithRetry(imageUrl, null, isHorizontal, transformation, true)
+                        return true
+                    }
                     mFlProgress.isVisible = true
                     mLoading.isGone = true
                     mRetry?.isVisible = true

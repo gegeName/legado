@@ -123,15 +123,18 @@ object BookHelp {
     }
 
     //清除已经看过的漫画数据
-    private fun clearComicCache(book: Book) {
+    fun clearComicCache(
+        book: Book,
+        durChapterIndex: Int = book.durChapterIndex
+    ) {
         //只处理漫画
-        //为0的时候，不清除已缓存数据
+        //为0的时候，不清除已缓存数据，避免误删用户主动离线缓存的章节图片
         if (!book.isImage || AppConfig.imageRetainNum == 0) {
             return
         }
         //向前保留设定数量，向后保留预下载数量
-        val startIndex = book.durChapterIndex - AppConfig.imageRetainNum
-        val endIndex = book.durChapterIndex + AppConfig.preDownloadNum
+        val startIndex = durChapterIndex - AppConfig.imageRetainNum
+        val endIndex = durChapterIndex + AppConfig.mangaPreDownloadNum
         val chapterList = appDb.bookChapterDao.getChapterList(book.bookUrl, startIndex, endIndex)
         val imgNames = hashSetOf<String>()
         //获取需要保留章节的图片信息
@@ -209,10 +212,13 @@ object BookHelp {
         book: Book,
         bookChapter: BookChapter,
         content: String,
-        concurrency: Int = AppConfig.threadCount
+        concurrency: Int = AppConfig.threadCount,
+        shouldContinue: (() -> Boolean)? = null
     ) = coroutineScope {
         flowImages(bookChapter, content).onEachParallel(concurrency) { mSrc ->
-            saveImage(bookSource, book, mSrc, bookChapter)
+            if (shouldContinue?.invoke() != false) {
+                saveImage(bookSource, book, mSrc, bookChapter, shouldContinue)
+            }
         }.collect()
     }
 
@@ -220,7 +226,8 @@ object BookHelp {
         bookSource: BookSource?,
         book: Book,
         src: String,
-        chapter: BookChapter? = null
+        chapter: BookChapter? = null,
+        shouldSave: (() -> Boolean)? = null
     ) {
         if (isImageExist(book, src)) {
             return
@@ -230,6 +237,9 @@ object BookHelp {
         }
         mutex.lock()
         try {
+            if (shouldSave?.invoke() == false) {
+                return
+            }
             if (isImageExist(book, src)) {
                 return
             }
@@ -243,6 +253,9 @@ object BookHelp {
                     src, bytes, isCover = false, bookSource, book
                 )
             }?.let {
+                if (shouldSave?.invoke() == false) {
+                    return
+                }
                 if (!checkImage(it)) {
                     // 如果部分图片失效，每次进入正文都会花很长时间再次获取图片数据
                     // 所以无论如何都要将数据写入到文件里
@@ -366,7 +379,8 @@ object BookHelp {
             val matcher = AppPattern.imgPattern.matcher(it)
             while (matcher.find()) {
                 val src = matcher.group(1)!!
-                val image = getImage(book, src)
+                val mSrc = NetworkUtils.getAbsoluteURL(bookChapter.url, src)
+                val image = getImage(book, mSrc)
                 if (!image.exists()) {
                     ret = false
                     continue
