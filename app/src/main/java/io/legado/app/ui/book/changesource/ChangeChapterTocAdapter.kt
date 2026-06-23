@@ -2,6 +2,7 @@ package io.legado.app.ui.book.changesource
 
 import android.content.Context
 import android.view.ViewGroup
+import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.adapter.ItemViewHolder
 import io.legado.app.base.adapter.RecyclerAdapter
@@ -58,8 +59,12 @@ class ChangeChapterTocAdapter(context: Context, val callback: Callback) :
 
     override fun registerListener(holder: ItemViewHolder, binding: ItemChapterListBinding) {
         holder.itemView.setOnClickListener {
-            getItem(holder.layoutPosition)?.let {
-                callback.clickChapter(it, getItem(holder.layoutPosition + 1)?.url)
+            val position = holder.bindingAdapterPosition
+            if (position == RecyclerView.NO_POSITION) {
+                return@setOnClickListener
+            }
+            getItem(position)?.let {
+                callback.clickChapter(it, getItem(position + 1)?.url)
             }
         }
     }

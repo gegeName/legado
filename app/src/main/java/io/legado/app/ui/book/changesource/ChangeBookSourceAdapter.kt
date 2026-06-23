@@ -8,6 +8,7 @@ import androidx.appcompat.widget.PopupMenu
 import androidx.core.graphics.drawable.DrawableCompat
 import androidx.core.view.isVisible
 import androidx.recyclerview.widget.DiffUtil
+import androidx.recyclerview.widget.RecyclerView
 import io.legado.app.R
 import io.legado.app.base.adapter.DiffRecyclerAdapter
 import io.legado.app.base.adapter.ItemViewHolder
@@ -20,7 +21,6 @@ import io.legado.app.utils.gone
 import io.legado.app.utils.invisible
 import io.legado.app.utils.visible
 import splitties.init.appCtx
-import splitties.views.onLongClick
 
 
 class ChangeBookSourceAdapter(
@@ -36,6 +36,7 @@ class ChangeBookSourceAdapter(
 
         override fun areContentsTheSame(oldItem: SearchBook, newItem: SearchBook): Boolean {
             return oldItem.originName == newItem.originName
+                    && oldItem.author == newItem.author
                     && oldItem.getDisplayLastChapterTitle() == newItem.getDisplayLastChapterTitle()
                     && oldItem.chapterWordCountText == newItem.chapterWordCountText
                     && oldItem.respondTime == newItem.respondTime
@@ -139,7 +140,7 @@ class ChangeBookSourceAdapter(
                     appCtx.getCompatColor(R.color.md_red_A200)
                 )
                 binding.ivBad.gone()
-                getItem(holder.layoutPosition)?.let {
+                getItem(holder)?.let {
                     callBack.setBookScore(it, 1)
                 }
             } else {
@@ -148,7 +149,7 @@ class ChangeBookSourceAdapter(
                     appCtx.getCompatColor(R.color.md_red_100)
                 )
                 binding.ivBad.visible()
-                getItem(holder.layoutPosition)?.let {
+                getItem(holder)?.let {
                     callBack.setBookScore(it, 0)
                 }
             }
@@ -160,7 +161,7 @@ class ChangeBookSourceAdapter(
                     appCtx.getCompatColor(R.color.md_blue_A200)
                 )
                 binding.ivGood.gone()
-                getItem(holder.layoutPosition)?.let {
+                getItem(holder)?.let {
                     callBack.setBookScore(it, -1)
                 }
             } else {
@@ -169,21 +170,31 @@ class ChangeBookSourceAdapter(
                     appCtx.getCompatColor(R.color.md_blue_100)
                 )
                 binding.ivGood.visible()
-                getItem(holder.layoutPosition)?.let {
+                getItem(holder)?.let {
                     callBack.setBookScore(it, 0)
                 }
             }
         }
         holder.itemView.setOnClickListener {
-            getItem(holder.layoutPosition)?.let {
+            getItem(holder)?.let {
                 if (it.bookUrl != callBack.oldBookUrl) {
                     callBack.changeTo(it)
                 }
             }
         }
-        holder.itemView.onLongClick {
-            showMenu(holder.itemView, getItem(holder.layoutPosition))
+        holder.itemView.setOnLongClickListener {
+            val item = getItem(holder) ?: return@setOnLongClickListener false
+            showMenu(holder.itemView, item)
+            true
         }
+    }
+
+    private fun getItem(holder: ItemViewHolder): SearchBook? {
+        val position = holder.bindingAdapterPosition
+        if (position == RecyclerView.NO_POSITION) {
+            return null
+        }
+        return getItem(position)
     }
 
     private fun showMenu(view: View, searchBook: SearchBook?) {
@@ -213,7 +224,6 @@ class ChangeBookSourceAdapter(
                     noButton()
                     yesButton {
                         callBack.deleteSource(searchBook)
-                        updateItems(0, itemCount, listOf<Int>())
                     }
                 }
             }
