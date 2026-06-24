@@ -7,12 +7,12 @@ import android.graphics.drawable.BitmapDrawable
 import android.os.Build
 import android.os.Bundle
 import android.util.AttributeSet
-import android.util.DebugUtils
 import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
 import android.view.View
+import android.view.ViewConfiguration
 import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.annotation.RequiresApi
@@ -32,11 +32,10 @@ import io.legado.app.lib.theme.primaryColor
 import io.legado.app.model.AudioPlay
 import io.legado.app.service.AudioPlayService
 import io.legado.app.ui.book.audio.AudioPlayActivity
-import io.legado.app.ui.widget.TitleBar
 import io.legado.app.ui.widget.MiniAudioPlayerView
+import io.legado.app.ui.widget.TitleBar
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.DebugLog
-import io.legado.app.utils.LogUtils
 import io.legado.app.utils.applyBackgroundTint
 import io.legado.app.utils.applyOpenTint
 import io.legado.app.utils.applyTint
@@ -48,6 +47,7 @@ import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.setStatusBarColorAuto
+import io.legado.app.utils.startActivity
 import io.legado.app.utils.toastOnUi
 import io.legado.app.utils.windowSize
 
@@ -62,6 +62,8 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     protected abstract val binding: VB
     private var miniAudioPlayerView: MiniAudioPlayerView? = null
+    private var miniAudioLastClickTime = 0L
+    private val miniAudioSingleClickRunnable = Runnable { toggleMiniAudioPlayState() }
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -94,7 +96,7 @@ abstract class BaseActivity<VB : ViewBinding>(
         window.decorView.disableAutoFill()
         initTheme()
         super.onCreate(savedInstanceState)
-        DebugLog.d("BaseActivity","当前activity="+this::class.simpleName.toString())
+        DebugLog.d("BaseActivity", "当前activity=" + this::class.simpleName.toString())
         setupSystemBar()
         setContentView(binding.root)
         upBackgroundImage()
@@ -223,6 +225,9 @@ abstract class BaseActivity<VB : ViewBinding>(
     private fun observeMiniAudioPlayer() {
         observeEventSticky<Int>(EventBus.AUDIO_STATE) {
             AudioPlay.status = it
+            if (it == Status.PLAY) {
+                AudioPlay.hideMiniPlayerWhenPaused = false
+            }
             updateMiniAudioPlayer()
         }
         observeEventSticky<String>(EventBus.AUDIO_SUB_TITLE) {
@@ -231,7 +236,12 @@ abstract class BaseActivity<VB : ViewBinding>(
     }
 
     private fun updateMiniAudioPlayer() {
-        if (this is AudioPlayActivity || !AudioPlayService.isRun || AudioPlay.book == null) {
+        if (
+            this is AudioPlayActivity ||
+            !AudioPlayService.isRun ||
+            AudioPlay.book == null ||
+            AudioPlay.hideMiniPlayerWhenPaused && AudioPlay.status != Status.PLAY
+        ) {
             miniAudioPlayerView?.visibility = View.GONE
             miniAudioPlayerView?.setPlaying(false)
             return
@@ -248,10 +258,17 @@ abstract class BaseActivity<VB : ViewBinding>(
         val playerView = MiniAudioPlayerView(this).apply {
             visibility = View.GONE
             setOnClickListener {
-                if (AudioPlayService.pause || AudioPlay.status != Status.PLAY) {
-                    AudioPlay.resume(this@BaseActivity)
+                val now = System.currentTimeMillis()
+                if (now - miniAudioLastClickTime <= ViewConfiguration.getDoubleTapTimeout()) {
+                    miniAudioLastClickTime = 0L
+                    miniAudioPlayerView?.removeCallbacks(miniAudioSingleClickRunnable)
+                    openAudioPlayActivity()
                 } else {
-                    AudioPlay.pause(this@BaseActivity)
+                    miniAudioLastClickTime = now
+                    postDelayed(
+                        miniAudioSingleClickRunnable,
+                        ViewConfiguration.getDoubleTapTimeout().toLong()
+                    )
                 }
             }
         }
@@ -265,6 +282,24 @@ abstract class BaseActivity<VB : ViewBinding>(
         )
         miniAudioPlayerView = playerView
         return playerView
+    }
+
+    private fun toggleMiniAudioPlayState() {
+        miniAudioLastClickTime = 0L
+        if (AudioPlayService.pause || AudioPlay.status != Status.PLAY) {
+            AudioPlay.hideMiniPlayerWhenPaused = false
+            AudioPlay.resume(this)
+        } else {
+            AudioPlay.pause(this)
+        }
+    }
+
+    private fun openAudioPlayActivity() {
+        val bookUrl = AudioPlay.book?.bookUrl ?: return
+        AudioPlay.hideMiniPlayerWhenPaused = false
+        startActivity<AudioPlayActivity> {
+            putExtra("bookUrl", bookUrl)
+        }
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {

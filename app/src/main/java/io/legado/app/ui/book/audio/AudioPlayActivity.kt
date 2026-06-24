@@ -84,7 +84,7 @@ class AudioPlayActivity :
             if (it.resultCode == RESULT_OK) {
                 viewModel.upSource()
             }
-    }
+        }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.titleBar.setBackgroundResource(R.color.transparent)
@@ -245,9 +245,20 @@ class AudioPlayActivity :
 
     private fun playButton() {
         when (AudioPlay.status) {
-            Status.PLAY -> AudioPlay.pause(this)
-            Status.PAUSE -> AudioPlay.resume(this)
-            else -> AudioPlay.loadOrUpPlayUrl()
+            Status.PLAY -> {
+                AudioPlay.hideMiniPlayerWhenPaused = true
+                AudioPlay.pause(this)
+            }
+
+            Status.PAUSE -> {
+                AudioPlay.hideMiniPlayerWhenPaused = false
+                AudioPlay.resume(this)
+            }
+
+            else -> {
+                AudioPlay.hideMiniPlayerWhenPaused = false
+                AudioPlay.loadOrUpPlayUrl()
+            }
         }
     }
 

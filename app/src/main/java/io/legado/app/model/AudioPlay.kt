@@ -75,6 +75,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     private var noPreloadChapterKey: String? = null
     private val failedPlayChapterKeys = Collections.synchronizedSet(hashSetOf<String>())
     private var ignoreMediaPreviousUntil = 0L
+    var hideMiniPlayerWhenPaused = false
 
     fun changePlayMode() {
         playMode = playMode.next()
