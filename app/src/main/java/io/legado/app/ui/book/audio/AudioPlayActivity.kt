@@ -68,6 +68,7 @@ class AudioPlayActivity :
     private val timerSliderPopup by lazy { TimerSliderPopup(this) }
     private var adjustProgress = false
     private var playMode = AudioPlay.PlayMode.LIST_END_STOP
+    private val notificationOpenPrevGuardMs = 5_000L
 
     private val tocActivityResult = registerForActivityResult(TocActivityResult()) {
         it?.let {
@@ -105,8 +106,13 @@ class AudioPlayActivity :
     }
 
     private fun handleIntent(intent: Intent) {
+        val fromNotification = intent.getBooleanExtra("fromNotification", false)
+        if (fromNotification) {
+            AudioPlay.ignoreMediaPreviousTemporarily(notificationOpenPrevGuardMs)
+            guardPreviousButtonAfterNotification(notificationOpenPrevGuardMs)
+        }
         val resumeAfterOpen = (AudioPlayService.isRun && !AudioPlayService.pause)
-                || (intent.getBooleanExtra("fromNotification", false)
+                || (fromNotification
                 && intent.getBooleanExtra("resumeOnOpen", false))
         viewModel.initData(intent)
         if (resumeAfterOpen) {
@@ -118,6 +124,18 @@ class AudioPlayActivity :
                 }
             }
         }
+    }
+
+    private fun guardPreviousButtonAfterNotification(duration: Long) {
+        binding.ivSkipPrevious.isEnabled = false
+        binding.ivSkipPrevious.isClickable = false
+        binding.ivSkipPrevious.clearFocus()
+        binding.root.isFocusableInTouchMode = true
+        binding.root.requestFocus()
+        binding.ivSkipPrevious.postDelayed({
+            binding.ivSkipPrevious.isEnabled = AudioPlay.durChapterIndex > 0
+            binding.ivSkipPrevious.isClickable = true
+        }, duration)
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {

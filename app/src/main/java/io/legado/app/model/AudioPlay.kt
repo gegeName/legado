@@ -29,6 +29,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancelChildren
 import splitties.init.appCtx
+import java.util.Collections
 
 @SuppressLint("StaticFieldLeak")
 @Suppress("unused")
@@ -72,11 +73,21 @@ object AudioPlay : CoroutineScope by MainScope() {
     private var preloadedPlay: PreloadedPlay? = null
     private var preloadingChapterKey: String? = null
     private var noPreloadChapterKey: String? = null
+    private val failedPlayChapterKeys = Collections.synchronizedSet(hashSetOf<String>())
+    private var ignoreMediaPreviousUntil = 0L
 
     fun changePlayMode() {
         playMode = playMode.next()
         clearPreload()
         postEvent(EventBus.PLAY_MODE_CHANGED, playMode)
+    }
+
+    fun ignoreMediaPreviousTemporarily(duration: Long = 5_000L) {
+        ignoreMediaPreviousUntil = System.currentTimeMillis() + duration
+    }
+
+    fun shouldIgnoreMediaPrevious(): Boolean {
+        return System.currentTimeMillis() < ignoreMediaPreviousUntil
     }
 
     fun upData(book: Book) {
@@ -99,6 +110,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             durPlayUrl = ""
             durAudioSize = 0
             clearPreload()
+            clearFailedChapters()
         }
         upDurChapter()
     }
@@ -118,6 +130,7 @@ object AudioPlay : CoroutineScope by MainScope() {
         durPlayUrl = ""
         durAudioSize = 0
         clearPreload()
+        clearFailedChapters()
         upDurChapter()
         postEvent(EventBus.AUDIO_BUFFER_PROGRESS, 0)
     }
@@ -158,6 +171,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 val chapter = durChapter
                 if (chapter == null) {
                     removeLoading(index)
+                    handlePlayError(book.bookUrl, index, "音频章节不存在")
                     return
                 }
                 if (chapter.isVolume) {
@@ -181,7 +195,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 }
             } else {
                 removeLoading(index)
-                appCtx.toastOnUi("book or source is null")
+                handlePlayError(book?.bookUrl, index, "book or source is null")
             }
         }
     }
@@ -195,13 +209,15 @@ object AudioPlay : CoroutineScope by MainScope() {
         WebBook.getContent(this, bookSource, book, chapter)
                     .onSuccess { content ->
                         if (content.isEmpty()) {
-                            appCtx.toastOnUi("未获取到资源链接")
+                            upLoading(false)
+                            handlePlayError(book.bookUrl, chapter.index, "未获取到资源链接")
                         } else {
                             contentLoadFinish(chapter, content)
                         }
                     }.onError {
                         AppLog.put("获取资源链接出错\n$it", it, true)
                         upLoading(false)
+                        handlePlayError(book.bookUrl, chapter.index, "获取资源链接出错")
                     }.onCancel {
                         removeLoading(index)
                     }.onFinally {
@@ -276,6 +292,7 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun stop() {
         clearPreload()
+        clearFailedChapters()
         coroutineContext.cancelChildren()
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
@@ -313,6 +330,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterPos = 0
                 durPlayUrl = ""
                 clearPreload()
+                clearFailedChapters()
                 saveRead()
                 loadPlayUrl()
             }
@@ -320,6 +338,9 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun prev() {
+        if (shouldIgnoreMediaPrevious()) {
+            return
+        }
         Coroutine.async {
             if (durChapterIndex > 0) {
                 stopPlay()
@@ -327,6 +348,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterPos = 0
                 durPlayUrl = ""
                 clearPreload()
+                clearFailedChapters()
                 saveRead()
                 loadPlayUrl()
             }
@@ -335,6 +357,9 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun next(auto: Boolean = false) {
         Coroutine.async {
+            if (!auto) {
+                clearFailedChapters()
+            }
             when (playMode) {
                 PlayMode.LIST_END_STOP -> {
                     val nextIndex = findNextPlayableIndex(durChapterIndex, PlayMode.LIST_END_STOP)
@@ -382,6 +407,53 @@ object AudioPlay : CoroutineScope by MainScope() {
                     saveRead()
                     loadOrUpPlayUrl()
                 }
+            }
+        }
+    }
+
+    fun handlePlayError(message: String? = null) {
+        handlePlayError(book?.bookUrl, durChapterIndex, message)
+    }
+
+    private fun handlePlayError(bookUrl: String?, chapterIndex: Int, message: String? = null) {
+        Coroutine.async {
+            bookUrl?.let {
+                failedPlayChapterKeys.add("$it#$chapterIndex")
+            }
+            val currentBookUrl = book?.bookUrl
+            if (bookUrl != currentBookUrl || chapterIndex != durChapterIndex) {
+                return@async
+            }
+            val nextIndex = when (playMode) {
+                PlayMode.LIST_END_STOP -> findNextPlayableIndex(
+                    chapterIndex,
+                    PlayMode.LIST_END_STOP,
+                    excludeFailed = true
+                )
+
+                PlayMode.LIST_LOOP -> findNextPlayableIndex(
+                    chapterIndex,
+                    PlayMode.LIST_LOOP,
+                    excludeFailed = true
+                )
+
+                PlayMode.RANDOM -> findRandomPlayableIndex(
+                    excludeFailed = true
+                )
+
+                else -> null
+            }
+            if (nextIndex != null && nextIndex != chapterIndex) {
+                durChapterIndex = nextIndex
+                durChapterPos = 0
+                durPlayUrl = consumePreloadedPlay(durChapterIndex) ?: ""
+                saveRead()
+                loadOrUpPlayUrl()
+            } else {
+                clearPreload()
+                status = Status.STOP
+                postEvent(EventBus.AUDIO_STATE, Status.STOP)
+                message?.let { appCtx.toastOnUi(it) }
             }
         }
     }
@@ -474,6 +546,8 @@ object AudioPlay : CoroutineScope by MainScope() {
             }
             val content = BookHelp.getContent(book, chapter)?.takeIf { it.isNotBlank() }
                 ?: WebBook.getContentAwait(bookSource, book, chapter)
+                    .takeIf { it.isNotBlank() }
+                ?: return@async null
             PreloadedPlay(
                 preloadKey = preloadKey,
                 key = "${book.bookUrl}#$nextIndex",
@@ -494,6 +568,13 @@ object AudioPlay : CoroutineScope by MainScope() {
             } else if (preload == null) {
                 noPreloadChapterKey = preloadKey
             }
+        }.onError {
+            if (book.bookUrl == AudioPlay.book?.bookUrl
+                && currentIndex == durChapterIndex
+                && preloadPlayMode == playMode
+            ) {
+                noPreloadChapterKey = preloadKey
+            }
         }.onFinally {
             if (preloadingChapterKey == preloadKey) {
                 preloadingChapterKey = null
@@ -510,16 +591,25 @@ object AudioPlay : CoroutineScope by MainScope() {
                 && durChapterPos == durAudioSize
     }
 
-    private fun findNextPlayableIndex(currentIndex: Int, mode: PlayMode): Int? {
+    private fun findNextPlayableIndex(
+        currentIndex: Int,
+        mode: PlayMode,
+        excludeFailed: Boolean = false
+    ): Int? {
         val bookUrl = book?.bookUrl ?: return null
-        return findNextPlayableIndex(bookUrl, currentIndex, mode)
+        return findNextPlayableIndex(bookUrl, currentIndex, mode, excludeFailed)
     }
 
-    private fun findNextPlayableIndex(bookUrl: String, currentIndex: Int, mode: PlayMode): Int? {
+    private fun findNextPlayableIndex(
+        bookUrl: String,
+        currentIndex: Int,
+        mode: PlayMode,
+        excludeFailed: Boolean = false
+    ): Int? {
         return when (mode) {
             PlayMode.LIST_END_STOP -> {
                 (currentIndex + 1 until simulatedChapterSize).firstOrNull { index ->
-                    appDb.bookChapterDao.getChapter(bookUrl, index)?.isVolume == false
+                    isPlayableChapter(bookUrl, index, excludeFailed)
                 }
             }
             PlayMode.LIST_LOOP -> {
@@ -527,11 +617,30 @@ object AudioPlay : CoroutineScope by MainScope() {
                 (1..simulatedChapterSize).map { offset ->
                     (currentIndex + offset) % simulatedChapterSize
                 }.firstOrNull { index ->
-                    appDb.bookChapterDao.getChapter(bookUrl, index)?.isVolume == false
+                    isPlayableChapter(bookUrl, index, excludeFailed)
                 }
             }
             else -> null
         }
+    }
+
+    private fun findRandomPlayableIndex(excludeFailed: Boolean = false): Int? {
+        val bookUrl = book?.bookUrl ?: return null
+        if (simulatedChapterSize <= 0) return null
+        return (0 until simulatedChapterSize)
+            .filter { index -> isPlayableChapter(bookUrl, index, excludeFailed) }
+            .randomOrNull()
+    }
+
+    private fun isPlayableChapter(
+        bookUrl: String,
+        index: Int,
+        excludeFailed: Boolean = false
+    ): Boolean {
+        if (excludeFailed && failedPlayChapterKeys.contains("$bookUrl#$index")) {
+            return false
+        }
+        return appDb.bookChapterDao.getChapter(bookUrl, index)?.isVolume == false
     }
 
     private fun consumePreloadedPlay(index: Int): String? {
@@ -562,6 +671,10 @@ object AudioPlay : CoroutineScope by MainScope() {
         preloadedPlay = null
         preloadingChapterKey = null
         noPreloadChapterKey = null
+    }
+
+    private fun clearFailedChapters() {
+        failedPlayChapterKeys.clear()
     }
 
     fun register(context: Context) {

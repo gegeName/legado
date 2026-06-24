@@ -15,6 +15,7 @@ import android.os.PowerManager
 import android.support.v4.media.MediaMetadataCompat
 import android.support.v4.media.session.MediaSessionCompat
 import android.support.v4.media.session.PlaybackStateCompat
+import android.view.KeyEvent
 import androidx.core.app.NotificationCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.media.AudioFocusRequestCompat
@@ -44,7 +45,6 @@ import io.legado.app.utils.broadcastPendingIntent
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.printOnDebug
 import io.legado.app.utils.servicePendingIntent
-import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.Dispatchers.Main
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -81,10 +81,16 @@ class AudioPlayService : BaseService(),
         private const val MEDIA_SESSION_ACTIONS = (PlaybackStateCompat.ACTION_PLAY
                 or PlaybackStateCompat.ACTION_PAUSE
                 or PlaybackStateCompat.ACTION_PLAY_PAUSE
-                or PlaybackStateCompat.ACTION_SEEK_TO)
+                or PlaybackStateCompat.ACTION_SEEK_TO
+                or PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
+                or PlaybackStateCompat.ACTION_SKIP_TO_NEXT)
 
         private const val APP_ACTION_STOP = "Stop"
         private const val APP_ACTION_TIMER = "Timer"
+        private const val REQUEST_CODE_RESUME = 1
+        private const val REQUEST_CODE_PAUSE = 2
+        private const val REQUEST_CODE_STOP = 3
+        private const val REQUEST_CODE_TIMER = 4
     }
 
     private val useWakeLock = AppConfig.audioPlayUseWakeLock
@@ -171,8 +177,12 @@ class AudioPlayService : BaseService(),
 
                 IntentAction.pause -> pause()
                 IntentAction.resume -> resume()
-                IntentAction.prev -> AudioPlay.prev()
-                IntentAction.next -> AudioPlay.next()
+                IntentAction.prev -> {
+                    AudioPlay.prev()
+                }
+                IntentAction.next -> {
+                    AudioPlay.next()
+                }
                 IntentAction.adjustSpeed -> upSpeed(intent.getFloatExtra("adjust", 1f))
                 IntentAction.addTimer -> addTimer()
                 IntentAction.setTimer -> setTimer(intent.getIntExtra("minute", 0))
@@ -224,8 +234,6 @@ class AudioPlayService : BaseService(),
             return
         }
         execute(context = Main) {
-            AudioPlay.status = Status.STOP
-            postEvent(EventBus.AUDIO_STATE, Status.STOP)
             upPlayProgressJob?.cancel()
             val analyzeUrl = AnalyzeUrl(
                 url,
@@ -240,8 +248,7 @@ class AudioPlayService : BaseService(),
             exoPlayer.prepare()
         }.onError {
             AppLog.put("播放出错\n${it.localizedMessage}", it)
-            toastOnUi("$url ${it.localizedMessage}")
-            stopSelf()
+            AudioPlay.handlePlayError("播放出错\n${it.localizedMessage}")
         }
     }
 
@@ -408,12 +415,10 @@ class AudioPlayService : BaseService(),
      */
     override fun onPlayerError(error: PlaybackException) {
         super.onPlayerError(error)
-        AudioPlay.status = Status.STOP
-        postEvent(EventBus.AUDIO_STATE, Status.STOP)
         AudioPlay.upLoading(false)
         val errorMsg = "音频播放出错\n${error.errorCodeName} ${error.errorCode}"
         AppLog.put(errorMsg, error)
-        toastOnUi(errorMsg)
+        AudioPlay.handlePlayError(errorMsg)
     }
 
     private fun setTimer(minute: Int) {
@@ -513,19 +518,47 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint("UnspecifiedImmutableFlag")
     private fun initMediaSession() {
-        mediaSessionCompat = MediaSessionCompat(this, "readAloud")
+        mediaSessionCompat = MediaSessionCompat(this, "audioPlay")
         mediaSessionCompat?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onSeekTo(pos: Long) {
                 AudioPlay.adjustProgress(pos.toInt())
             }
 
             override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {
-                return MediaButtonReceiver.handleIntent(this@AudioPlayService, mediaButtonEvent)
+                if (Intent.ACTION_MEDIA_BUTTON != mediaButtonEvent.action) {
+                    return false
+                }
+                @Suppress("DEPRECATION")
+                val keyEvent = mediaButtonEvent.getParcelableExtra<KeyEvent>(Intent.EXTRA_KEY_EVENT)
+                    ?: return false
+                if (keyEvent.action != KeyEvent.ACTION_DOWN) {
+                    return true
+                }
+                when (keyEvent.keyCode) {
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
+                        if (!AudioPlay.shouldIgnoreMediaPrevious()) {
+                            AudioPlay.prev()
+                        }
+                    }
+                    KeyEvent.KEYCODE_MEDIA_NEXT -> AudioPlay.next()
+                    else -> if (pause) resume() else pause()
+                }
+                return true
             }
 
             override fun onPlay() = resume()
 
             override fun onPause() = pause()
+
+            override fun onSkipToPrevious() {
+                if (!AudioPlay.shouldIgnoreMediaPrevious()) {
+                    AudioPlay.prev()
+                }
+            }
+
+            override fun onSkipToNext() {
+                AudioPlay.next()
+            }
 
             override fun onCustomAction(action: String?, extras: Bundle?) {
                 action ?: return
@@ -635,24 +668,24 @@ class AudioPlayService : BaseService(),
             builder.addAction(
                 R.drawable.ic_play_24dp,
                 getString(R.string.resume),
-                servicePendingIntent<AudioPlayService>(IntentAction.resume)
+                servicePendingIntent<AudioPlayService>(IntentAction.resume, REQUEST_CODE_RESUME)
             )
         } else {
             builder.addAction(
                 R.drawable.ic_pause_24dp,
                 getString(R.string.pause),
-                servicePendingIntent<AudioPlayService>(IntentAction.pause)
+                servicePendingIntent<AudioPlayService>(IntentAction.pause, REQUEST_CODE_PAUSE)
             )
         }
         builder.addAction(
             R.drawable.ic_stop_black_24dp,
             getString(R.string.stop),
-            servicePendingIntent<AudioPlayService>(IntentAction.stop)
+            servicePendingIntent<AudioPlayService>(IntentAction.stop, REQUEST_CODE_STOP)
         )
         builder.addAction(
             R.drawable.ic_time_add_24dp,
             getString(R.string.set_timer),
-            servicePendingIntent<AudioPlayService>(IntentAction.addTimer)
+            servicePendingIntent<AudioPlayService>(IntentAction.addTimer, REQUEST_CODE_TIMER)
         )
         builder.setStyle(
             androidx.media.app.NotificationCompat.MediaStyle()
