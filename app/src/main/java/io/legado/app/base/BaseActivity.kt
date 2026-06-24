@@ -8,6 +8,7 @@ import android.os.Build
 import android.os.Bundle
 import android.util.AttributeSet
 import android.util.DebugUtils
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
 import android.view.MotionEvent
@@ -20,13 +21,19 @@ import androidx.viewbinding.ViewBinding
 import io.legado.app.R
 import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppLog
+import io.legado.app.constant.EventBus
+import io.legado.app.constant.Status
 import io.legado.app.constant.Theme
 import io.legado.app.help.config.AppConfig
 import io.legado.app.help.config.ThemeConfig
 import io.legado.app.lib.theme.ThemeStore
 import io.legado.app.lib.theme.backgroundColor
 import io.legado.app.lib.theme.primaryColor
+import io.legado.app.model.AudioPlay
+import io.legado.app.service.AudioPlayService
+import io.legado.app.ui.book.audio.AudioPlayActivity
 import io.legado.app.ui.widget.TitleBar
+import io.legado.app.ui.widget.MiniAudioPlayerView
 import io.legado.app.utils.ColorUtils
 import io.legado.app.utils.DebugLog
 import io.legado.app.utils.LogUtils
@@ -34,8 +41,10 @@ import io.legado.app.utils.applyBackgroundTint
 import io.legado.app.utils.applyOpenTint
 import io.legado.app.utils.applyTint
 import io.legado.app.utils.disableAutoFill
+import io.legado.app.utils.dpToPx
 import io.legado.app.utils.fullScreen
 import io.legado.app.utils.hideSoftInput
+import io.legado.app.utils.observeEventSticky
 import io.legado.app.utils.setLightStatusBar
 import io.legado.app.utils.setNavigationBarColorAuto
 import io.legado.app.utils.setStatusBarColorAuto
@@ -52,6 +61,7 @@ abstract class BaseActivity<VB : ViewBinding>(
 ) : AppCompatActivity() {
 
     protected abstract val binding: VB
+    private var miniAudioPlayerView: MiniAudioPlayerView? = null
 
     val isInMultiWindow: Boolean
         @SuppressLint("ObsoleteSdkInt")
@@ -96,7 +106,13 @@ abstract class BaseActivity<VB : ViewBinding>(
             finish()
         }
         observeLiveBus()
+        observeMiniAudioPlayer()
         onActivityCreated(savedInstanceState)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        updateMiniAudioPlayer()
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
@@ -202,6 +218,53 @@ abstract class BaseActivity<VB : ViewBinding>(
     }
 
     open fun observeLiveBus() {
+    }
+
+    private fun observeMiniAudioPlayer() {
+        observeEventSticky<Int>(EventBus.AUDIO_STATE) {
+            AudioPlay.status = it
+            updateMiniAudioPlayer()
+        }
+        observeEventSticky<String>(EventBus.AUDIO_SUB_TITLE) {
+            updateMiniAudioPlayer()
+        }
+    }
+
+    private fun updateMiniAudioPlayer() {
+        if (this is AudioPlayActivity || !AudioPlayService.isRun || AudioPlay.book == null) {
+            miniAudioPlayerView?.visibility = View.GONE
+            miniAudioPlayerView?.setPlaying(false)
+            return
+        }
+        val playerView = ensureMiniAudioPlayer()
+        playerView.visibility = View.VISIBLE
+        playerView.setCover(AudioPlay.book?.getDisplayCover(), AudioPlay.bookSource?.bookSourceUrl)
+        playerView.setPlaying(!AudioPlayService.pause && AudioPlay.status == Status.PLAY)
+    }
+
+    private fun ensureMiniAudioPlayer(): MiniAudioPlayerView {
+        miniAudioPlayerView?.let { return it }
+        val content = findViewById<FrameLayout>(android.R.id.content)
+        val playerView = MiniAudioPlayerView(this).apply {
+            visibility = View.GONE
+            setOnClickListener {
+                if (AudioPlayService.pause || AudioPlay.status != Status.PLAY) {
+                    AudioPlay.resume(this@BaseActivity)
+                } else {
+                    AudioPlay.pause(this@BaseActivity)
+                }
+            }
+        }
+        content.addView(
+            playerView,
+            FrameLayout.LayoutParams(92.dpToPx(), 92.dpToPx(), Gravity.END or Gravity.BOTTOM)
+                .apply {
+                    marginEnd = 16.dpToPx()
+                    bottomMargin = 24.dpToPx()
+                }
+        )
+        miniAudioPlayerView = playerView
+        return playerView
     }
 
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
