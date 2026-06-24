@@ -57,10 +57,11 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
         }
         titleData.postValue(book.name)
         coverData.postValue(book.getDisplayCover())
-        if (book.tocUrl.isEmpty() && !loadBookInfo(book)) {
+        val hasChapterCache = AudioPlay.chapterSize > 0
+        if (!hasChapterCache && book.tocUrl.isEmpty() && !loadBookInfo(book)) {
             return
         }
-        if (AudioPlay.chapterSize == 0 && !loadChapterList(book)) {
+        if (!hasChapterCache && !loadChapterList(book)) {
             return
         }
     }

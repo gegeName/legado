@@ -148,7 +148,7 @@ class AudioPlayService : BaseService(),
                     exoPlayer.stop()
                     upPlayProgressJob?.cancel()
                     pause = false
-                    position = AudioPlay.book?.durChapterPos ?: 0
+                    position = AudioPlay.durChapterPos
                     url = AudioPlay.durPlayUrl
                     play()
                 }
@@ -332,6 +332,9 @@ class AudioPlayService : BaseService(),
     private fun adjustProgress(position: Int) {
         this.position = position
         exoPlayer.seekTo(position.toLong())
+        upMediaSessionPlaybackState(if (pause) PlaybackStateCompat.STATE_PAUSED else PlaybackStateCompat.STATE_PLAYING)
+        upAudioPlayNotification()
+        preloadNextChapterIfNeeded()
     }
 
     /**
@@ -383,7 +386,7 @@ class AudioPlayService : BaseService(),
                 // 结束
                 upPlayProgressJob?.cancel()
                 AudioPlay.playPositionChanged(exoPlayer.duration.toInt())
-                AudioPlay.next()
+                AudioPlay.next(auto = true)
             }
         }
         upAudioPlayNotification()
@@ -466,10 +469,20 @@ class AudioPlayService : BaseService(),
                 postEvent(EventBus.AUDIO_BUFFER_PROGRESS, exoPlayer.bufferedPosition.toInt())
                 postEvent(EventBus.AUDIO_PROGRESS, AudioPlay.durChapterPos)
                 postEvent(EventBus.AUDIO_SIZE, exoPlayer.duration.toInt())
+                preloadNextChapterIfNeeded()
                 upMediaSessionPlaybackState(PlaybackStateCompat.STATE_PLAYING)
                 delay(1000)
             }
         }
+    }
+
+    private fun preloadNextChapterIfNeeded() {
+        val duration = exoPlayer.duration
+        if (duration <= 0) return
+        val currentPosition = exoPlayer.currentPosition
+        val remaining = duration - currentPosition
+        if (remaining > 30_000 && currentPosition < duration * 9 / 10) return
+        AudioPlay.preloadNextChapter()
     }
 
     /**
@@ -503,8 +516,7 @@ class AudioPlayService : BaseService(),
         mediaSessionCompat = MediaSessionCompat(this, "readAloud")
         mediaSessionCompat?.setCallback(object : MediaSessionCompat.Callback() {
             override fun onSeekTo(pos: Long) {
-                position = pos.toInt()
-                exoPlayer.seekTo(pos)
+                AudioPlay.adjustProgress(pos.toInt())
             }
 
             override fun onMediaButtonEvent(mediaButtonEvent: Intent): Boolean {

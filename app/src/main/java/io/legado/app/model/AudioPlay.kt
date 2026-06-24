@@ -12,12 +12,14 @@ import io.legado.app.data.appDb
 import io.legado.app.data.entities.Book
 import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
+import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.readSimulating
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.help.book.update
 import io.legado.app.help.coroutine.Coroutine
+import io.legado.app.model.analyzeRule.AnalyzeUrl
 import io.legado.app.model.webBook.WebBook
 import io.legado.app.service.AudioPlayService
 import io.legado.app.utils.postEvent
@@ -67,9 +69,13 @@ object AudioPlay : CoroutineScope by MainScope() {
     var inBookshelf = false
     var bookSource: BookSource? = null
     val loadingChapters = arrayListOf<Int>()
+    private var preloadedPlay: PreloadedPlay? = null
+    private var preloadingChapterKey: String? = null
+    private var noPreloadChapterKey: String? = null
 
     fun changePlayMode() {
         playMode = playMode.next()
+        clearPreload()
         postEvent(EventBus.PLAY_MODE_CHANGED, playMode)
     }
 
@@ -92,6 +98,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             durChapterPos = book.durChapterPos
             durPlayUrl = ""
             durAudioSize = 0
+            clearPreload()
         }
         upDurChapter()
     }
@@ -110,6 +117,7 @@ object AudioPlay : CoroutineScope by MainScope() {
         durChapterPos = book.durChapterPos
         durPlayUrl = ""
         durAudioSize = 0
+        clearPreload()
         upDurChapter()
         postEvent(EventBus.AUDIO_BUFFER_PROGRESS, 0)
     }
@@ -129,6 +137,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun loadOrUpPlayUrl() {
+        upDurChapter()
         if (durPlayUrl.isEmpty()) {
             loadPlayUrl()
         } else {
@@ -157,7 +166,33 @@ object AudioPlay : CoroutineScope by MainScope() {
                     return
                 }
                 upLoading(true)
-                WebBook.getContent(this, bookSource, book, chapter)
+                Coroutine.async(this) {
+                    BookHelp.getContent(book, chapter)?.takeIf { it.isNotBlank() }
+                }.onSuccess { content ->
+                    if (content != null) {
+                        removeLoading(index)
+                        upLoading(false)
+                        contentLoadFinish(chapter, content)
+                    } else {
+                        loadPlayUrlFromSource(index, bookSource, book, chapter)
+                    }
+                }.onError {
+                    loadPlayUrlFromSource(index, bookSource, book, chapter)
+                }
+            } else {
+                removeLoading(index)
+                appCtx.toastOnUi("book or source is null")
+            }
+        }
+    }
+
+    private fun loadPlayUrlFromSource(
+        index: Int,
+        bookSource: BookSource,
+        book: Book,
+        chapter: BookChapter
+    ) {
+        WebBook.getContent(this, bookSource, book, chapter)
                     .onSuccess { content ->
                         if (content.isEmpty()) {
                             appCtx.toastOnUi("未获取到资源链接")
@@ -172,18 +207,13 @@ object AudioPlay : CoroutineScope by MainScope() {
                     }.onFinally {
                         removeLoading(index)
                     }
-            } else {
-                removeLoading(index)
-                appCtx.toastOnUi("book or source is null")
-            }
-        }
     }
 
     /**
      * 加载完成
      */
     private fun contentLoadFinish(chapter: BookChapter, content: String) {
-        if (chapter.index == book?.durChapterIndex) {
+        if (chapter.bookUrl == book?.bookUrl && chapter.index == durChapterIndex) {
             durPlayUrl = content
             upPlayUrl()
         }
@@ -245,6 +275,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun stop() {
+        clearPreload()
         coroutineContext.cancelChildren()
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
@@ -265,6 +296,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     fun adjustProgress(position: Int) {
         durChapterPos = position
         saveRead()
+        postEvent(EventBus.AUDIO_PROGRESS, durChapterPos)
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
                 action = IntentAction.adjustProgress
@@ -280,6 +312,7 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex = index
                 durChapterPos = 0
                 durPlayUrl = ""
+                clearPreload()
                 saveRead()
                 loadPlayUrl()
             }
@@ -293,55 +326,62 @@ object AudioPlay : CoroutineScope by MainScope() {
                 durChapterIndex -= 1
                 durChapterPos = 0
                 durPlayUrl = ""
+                clearPreload()
                 saveRead()
                 loadPlayUrl()
             }
         }
     }
 
-    fun next() {
-        when (playMode) {
-            PlayMode.LIST_END_STOP -> {
-                if (durChapterIndex + 1 < simulatedChapterSize) {
-                    stopPlay()
-                    durChapterIndex += 1
+    fun next(auto: Boolean = false) {
+        Coroutine.async {
+            when (playMode) {
+                PlayMode.LIST_END_STOP -> {
+                    val nextIndex = findNextPlayableIndex(durChapterIndex, PlayMode.LIST_END_STOP)
+                    if (nextIndex != null) {
+                        if (!auto) stopPlay()
+                        durChapterIndex = nextIndex
+                        durChapterPos = 0
+                        durPlayUrl = consumePreloadedPlay(durChapterIndex) ?: ""
+                        saveRead()
+                        loadOrUpPlayUrl()
+                    } else if (auto) {
+                        stopPlay()
+                    }
+                }
+
+                PlayMode.SINGLE_LOOP -> {
+                    if (!auto) stopPlay()
                     durChapterPos = 0
                     durPlayUrl = ""
+                    clearPreload()
                     saveRead()
-                    loadPlayUrl()
+                    loadOrUpPlayUrl()
                 }
-            }
 
-            PlayMode.SINGLE_LOOP -> {
-                stopPlay()
-                durChapterPos = 0
-                durPlayUrl = ""
-                saveRead()
-                loadPlayUrl()
-            }
-
-            PlayMode.RANDOM -> {
-                if (simulatedChapterSize <= 0) {
-                    return
+                PlayMode.RANDOM -> {
+                    if (simulatedChapterSize <= 0) {
+                        return@async
+                    }
+                    if (!auto) stopPlay()
+                    durChapterIndex = (0 until simulatedChapterSize).random()
+                    durChapterPos = 0
+                    durPlayUrl = ""
+                    clearPreload()
+                    saveRead()
+                    loadOrUpPlayUrl()
                 }
-                stopPlay()
-                durChapterIndex = (0 until simulatedChapterSize).random()
-                durChapterPos = 0
-                durPlayUrl = ""
-                saveRead()
-                loadPlayUrl()
-            }
 
-            PlayMode.LIST_LOOP -> {
-                if (simulatedChapterSize <= 0) {
-                    return
+                PlayMode.LIST_LOOP -> {
+                    val nextIndex = findNextPlayableIndex(durChapterIndex, PlayMode.LIST_LOOP)
+                        ?: return@async
+                    if (!auto) stopPlay()
+                    durChapterIndex = nextIndex
+                    durChapterPos = 0
+                    durPlayUrl = consumePreloadedPlay(durChapterIndex) ?: ""
+                    saveRead()
+                    loadOrUpPlayUrl()
                 }
-                stopPlay()
-                durChapterIndex = (durChapterIndex + 1) % simulatedChapterSize
-                durChapterPos = 0
-                durPlayUrl = ""
-                saveRead()
-                loadPlayUrl()
             }
         }
     }
@@ -409,6 +449,58 @@ object AudioPlay : CoroutineScope by MainScope() {
         saveRead()
     }
 
+    fun preloadNextChapter() {
+        val currentIndex = durChapterIndex
+        val preloadPlayMode = playMode
+        val book = book ?: return
+        val bookSource = bookSource ?: return
+        val preloadKey = "${book.bookUrl}#$currentIndex"
+        if (preloadedPlay?.preloadKey == preloadKey
+            || preloadingChapterKey == preloadKey
+            || noPreloadChapterKey == preloadKey
+        ) {
+            return
+        }
+        preloadingChapterKey = preloadKey
+        Coroutine.async {
+            val nextIndex = findNextPlayableIndex(
+                book.bookUrl,
+                currentIndex,
+                preloadPlayMode
+            ) ?: return@async null
+            val chapter = appDb.bookChapterDao.getChapter(book.bookUrl, nextIndex)
+            if (chapter == null) {
+                return@async null
+            }
+            val content = BookHelp.getContent(book, chapter)?.takeIf { it.isNotBlank() }
+                ?: WebBook.getContentAwait(bookSource, book, chapter)
+            PreloadedPlay(
+                preloadKey = preloadKey,
+                key = "${book.bookUrl}#$nextIndex",
+                book = book,
+                bookSource = bookSource,
+                chapter = chapter,
+                url = content
+            )
+        }.onSuccess { preload ->
+            if (preload != null
+                && book.bookUrl == AudioPlay.book?.bookUrl
+                && currentIndex == durChapterIndex
+                && preloadPlayMode == playMode
+            ) {
+                preloadedPlay = preload
+                noPreloadChapterKey = null
+                preCacheAudio(preload)
+            } else if (preload == null) {
+                noPreloadChapterKey = preloadKey
+            }
+        }.onFinally {
+            if (preloadingChapterKey == preloadKey) {
+                preloadingChapterKey = null
+            }
+        }
+    }
+
     fun upLoading(loading: Boolean) {
         callback?.upLoading(loading)
     }
@@ -416,6 +508,60 @@ object AudioPlay : CoroutineScope by MainScope() {
     private fun isPlayToEnd(): Boolean {
         return durChapterIndex + 1 == simulatedChapterSize
                 && durChapterPos == durAudioSize
+    }
+
+    private fun findNextPlayableIndex(currentIndex: Int, mode: PlayMode): Int? {
+        val bookUrl = book?.bookUrl ?: return null
+        return findNextPlayableIndex(bookUrl, currentIndex, mode)
+    }
+
+    private fun findNextPlayableIndex(bookUrl: String, currentIndex: Int, mode: PlayMode): Int? {
+        return when (mode) {
+            PlayMode.LIST_END_STOP -> {
+                (currentIndex + 1 until simulatedChapterSize).firstOrNull { index ->
+                    appDb.bookChapterDao.getChapter(bookUrl, index)?.isVolume == false
+                }
+            }
+            PlayMode.LIST_LOOP -> {
+                if (simulatedChapterSize <= 0) return null
+                (1..simulatedChapterSize).map { offset ->
+                    (currentIndex + offset) % simulatedChapterSize
+                }.firstOrNull { index ->
+                    appDb.bookChapterDao.getChapter(bookUrl, index)?.isVolume == false
+                }
+            }
+            else -> null
+        }
+    }
+
+    private fun consumePreloadedPlay(index: Int): String? {
+        val bookUrl = book?.bookUrl ?: return null
+        val key = "$bookUrl#$index"
+        return preloadedPlay?.takeIf { it.key == key }?.url?.also {
+            clearPreload()
+        } ?: run {
+            clearPreload()
+            null
+        }
+    }
+
+    private fun preCacheAudio(preload: PreloadedPlay) {
+        Coroutine.async {
+            val analyzeUrl = AnalyzeUrl(
+                preload.url,
+                source = preload.bookSource,
+                ruleData = preload.book,
+                chapter = preload.chapter,
+                coroutineContext = coroutineContext
+            )
+            analyzeUrl.preCacheMedia()
+        }
+    }
+
+    private fun clearPreload() {
+        preloadedPlay = null
+        preloadingChapterKey = null
+        noPreloadChapterKey = null
     }
 
     fun register(context: Context) {
@@ -443,5 +589,14 @@ object AudioPlay : CoroutineScope by MainScope() {
         fun upLoading(loading: Boolean)
 
     }
+
+    private data class PreloadedPlay(
+        val preloadKey: String,
+        val key: String,
+        val book: Book,
+        val bookSource: BookSource,
+        val chapter: BookChapter,
+        val url: String
+    )
 
 }

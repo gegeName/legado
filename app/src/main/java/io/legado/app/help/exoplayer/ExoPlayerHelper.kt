@@ -5,11 +5,13 @@ import android.content.Context
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.database.StandaloneDatabaseProvider
+import androidx.media3.datasource.DataSpec
 import androidx.media3.datasource.FileDataSource
 import androidx.media3.datasource.ResolvingDataSource
 import androidx.media3.datasource.cache.Cache
 import androidx.media3.datasource.cache.CacheDataSink
 import androidx.media3.datasource.cache.CacheDataSource
+import androidx.media3.datasource.cache.CacheWriter
 import androidx.media3.datasource.cache.LeastRecentlyUsedCacheEvictor
 import androidx.media3.datasource.cache.SimpleCache
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -24,6 +26,7 @@ import io.legado.app.utils.externalCache
 import okhttp3.CacheControl
 import splitties.init.appCtx
 import java.io.File
+import java.io.InterruptedIOException
 import java.util.concurrent.TimeUnit
 
 
@@ -32,6 +35,7 @@ import java.util.concurrent.TimeUnit
 object ExoPlayerHelper {
 
     private const val SPLIT_TAG = "\uD83D\uDEA7"
+    const val DEFAULT_PRE_CACHE_BYTES = 2L * 1024L * 1024L
 
     private val mapType by lazy {
         object : TypeToken<Map<String, String>>() {}.type
@@ -40,6 +44,35 @@ object ExoPlayerHelper {
     fun createMediaItem(url: String, headers: Map<String, String>): MediaItem {
         val formatUrl = url + SPLIT_TAG + GSON.toJson(headers, mapType)
         return MediaItem.Builder().setUri(formatUrl).build()
+    }
+
+    fun preCache(url: String, headers: Map<String, String>, maxBytes: Long = DEFAULT_PRE_CACHE_BYTES) {
+        if (url.isBlank()) return
+        val dataSource = CacheDataSource.Factory()
+            .setCache(cache)
+            .setUpstreamDataSourceFactory(createOkHttpDataFactory(headers))
+            .setCacheReadDataSourceFactory(FileDataSource.Factory())
+            .setCacheWriteDataSinkFactory(
+                CacheDataSink.Factory()
+                    .setCache(cache)
+                    .setFragmentSize(CacheDataSink.DEFAULT_FRAGMENT_SIZE)
+            )
+            .createDataSource()
+        val dataSpec = DataSpec.Builder()
+            .setUri(url)
+            .setLength(maxBytes)
+            .build()
+        lateinit var cacheWriter: CacheWriter
+        cacheWriter = CacheWriter(dataSource, dataSpec, null) { _, bytesCached, _ ->
+            if (bytesCached >= maxBytes) {
+                cacheWriter.cancel()
+            }
+        }
+        try {
+            cacheWriter.cache()
+        } catch (_: InterruptedIOException) {
+            // Expected when the pre-cache limit has been reached.
+        }
     }
 
     fun createHttpExoPlayer(context: Context): ExoPlayer {
@@ -102,11 +135,16 @@ object ExoPlayerHelper {
      * Okhttp DataSource.Factory
      */
     private val okhttpDataFactory by lazy {
+        createOkHttpDataFactory(emptyMap())
+    }
+
+    private fun createOkHttpDataFactory(headers: Map<String, String>): OkHttpDataSource.Factory {
         val client = okHttpClient.newBuilder()
             .callTimeout(0, TimeUnit.SECONDS)
             .build()
-        OkHttpDataSource.Factory(client)
+        return OkHttpDataSource.Factory(client)
             .setCacheControl(CacheControl.Builder().maxAge(1, TimeUnit.DAYS).build())
+            .setDefaultRequestProperties(headers)
     }
 
     /**

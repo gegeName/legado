@@ -657,6 +657,11 @@ class AnalyzeUrl(
         return headerMap.get(UA_NAME, true) ?: AppConfig.userAgent
     }
 
+    fun preCacheMedia() {
+        setCookie()
+        ExoPlayerHelper.preCache(url, headerMap)
+    }
+
     fun isPost(): Boolean {
         return method == RequestMethod.POST
     }
