@@ -8,7 +8,6 @@ import android.os.Bundle
 import android.view.Menu
 import android.view.MenuItem
 import android.view.View
-import android.webkit.CookieManager
 import android.webkit.SslErrorHandler
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
@@ -25,7 +24,6 @@ import io.legado.app.constant.AppConst
 import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.databinding.ActivityWebViewBinding
 import io.legado.app.help.config.AppConfig
-import io.legado.app.help.http.CookieStore
 import io.legado.app.help.source.SourceVerificationHelp
 import io.legado.app.lib.dialogs.SelectItem
 import io.legado.app.lib.dialogs.alert
@@ -231,6 +229,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
     }
 
     override fun finish() {
+        AppCookieManager.syncFromWebView(binding.webView.url, viewModel.baseUrl)
         SourceVerificationHelp.checkResult(viewModel.sourceOrigin)
         super.finish()
     }
@@ -287,10 +286,7 @@ class WebViewActivity : VMBaseActivity<ActivityWebViewBinding, WebViewModel>() {
 
         override fun onPageFinished(view: WebView?, url: String?) {
             super.onPageFinished(view, url)
-            val cookieManager = CookieManager.getInstance()
-            url?.let {
-                CookieStore.setCookie(it, cookieManager.getCookie(it))
-            }
+            AppCookieManager.syncFromWebView(url, view?.url, viewModel.baseUrl)
             view?.title?.let { title ->
                 if (title != url && title != view.url && title.isNotBlank()) {
                     binding.titleBar.title = title

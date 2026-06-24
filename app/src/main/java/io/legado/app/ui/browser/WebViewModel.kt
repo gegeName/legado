@@ -11,6 +11,7 @@ import io.legado.app.constant.AppConst.imagePathKey
 import io.legado.app.constant.SourceType
 import io.legado.app.data.appDb
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.help.http.CookieManager
 import io.legado.app.help.http.newCallResponseBody
 import io.legado.app.help.http.okHttpClient
 import io.legado.app.help.source.SourceHelp
@@ -97,13 +98,17 @@ class WebViewModel(application: Application) : BaseViewModel(application) {
         if (!sourceVerificationEnable) {
             return success.invoke()
         }
+        CookieManager.syncFromWebView(intent?.getStringExtra("url"), webView.url, baseUrl)
         if (refetchAfterSuccess) {
             execute {
                 val url = intent!!.getStringExtra("url")!!
                 val source = appDb.bookSourceDao.getBookSource(sourceOrigin)
+                val refetchHeaderMap = HashMap(headerMap).apply {
+                    keys.firstOrNull { it.equals("Cookie", ignoreCase = true) }?.let(::remove)
+                }
                 html = AnalyzeUrl(
                     url,
-                    headerMapF = headerMap,
+                    headerMapF = refetchHeaderMap,
                     source = source,
                     coroutineContext = coroutineContext
                 ).getStrResponseAwait(useWebView = false).body

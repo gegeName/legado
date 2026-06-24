@@ -150,6 +150,25 @@ object CookieManager {
         }
     }
 
+    /**
+     * 将 WebView 验证/跳转后产生的 Cookie 同步到应用的 CookieStore。
+     * WebView 可能停在验证页或跳转后的地址, 同时保存原始地址可避免下次请求原站点时丢失验证状态。
+     */
+    fun syncFromWebView(vararg urls: String?) {
+        val cookieManager = CookieManager.getInstance()
+        cookieManager.flush()
+        urls.filterNotNull()
+            .map { it.trim() }
+            .filter { NetworkUtils.getBaseUrl(it) != null }
+            .distinct()
+            .forEach { url ->
+                val cookie = cookieManager.getCookie(url)
+                if (!cookie.isNullOrBlank()) {
+                    CookieStore.replaceCookie(url, cookie)
+                }
+            }
+    }
+
     fun List<Cookie>.getString() = buildString {
         this@getString.forEachIndexed { index, cookie ->
             if (index > 0) append("; ")
