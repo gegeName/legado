@@ -257,10 +257,10 @@ abstract class BaseActivity<VB : ViewBinding>(
         }
         content.addView(
             playerView,
-            FrameLayout.LayoutParams(92.dpToPx(), 92.dpToPx(), Gravity.END or Gravity.BOTTOM)
+            FrameLayout.LayoutParams(92.dpToPx(), 92.dpToPx(), Gravity.START or Gravity.BOTTOM)
                 .apply {
-                    marginEnd = 16.dpToPx()
-                    bottomMargin = 24.dpToPx()
+                    marginStart = 16.dpToPx()
+                    bottomMargin = 150.dpToPx()
                 }
         )
         miniAudioPlayerView = playerView

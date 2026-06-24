@@ -135,9 +135,7 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
                 downX = x
                 downY = y
                 if (collapsed) {
-                    expandFromEdge()
-                    downX = expandedX
-                    downY = expandedY
+                    updateExpandedPosition()
                 }
                 return true
             }
@@ -147,6 +145,13 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
                 val dy = event.rawY - downRawY
                 if (!dragging && (abs(dx) > touchSlop || abs(dy) > touchSlop)) {
                     dragging = true
+                    if (collapsedAtDown) {
+                        expandImmediately()
+                        downX = x
+                        downY = y
+                        downRawX = event.rawX
+                        downRawY = event.rawY
+                    }
                 }
                 if (dragging) {
                     moveTo(downX + dx, downY + dy)
@@ -156,7 +161,10 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
 
             MotionEvent.ACTION_UP -> {
                 parent?.requestDisallowInterceptTouchEvent(false)
-                if (dragging || collapsedAtDown) {
+                if (dragging) {
+                    scheduleAutoHide()
+                } else if (collapsedAtDown) {
+                    expandFromEdge()
                     scheduleAutoHide()
                 } else {
                     performClick()
@@ -240,27 +248,34 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
     }
 
     private fun expandFromEdge() {
+        updateExpandedPosition()
+        collapsed = false
+        animate().x(expandedX).y(expandedY).setDuration(220L)
+            .setInterpolator(AccelerateDecelerateInterpolator())
+            .start()
+    }
+
+    private fun expandImmediately() {
+        updateExpandedPosition()
+        collapsed = false
+        x = expandedX
+        y = expandedY
+    }
+
+    private fun updateExpandedPosition() {
         val parentView = parent as? ViewGroup ?: return
         val maxX = (parentView.width - width).coerceAtLeast(0).toFloat()
         val maxY = (parentView.height - height).coerceAtLeast(0).toFloat()
-        val targetX: Float
-        val targetY: Float
         when (collapsedEdge) {
             Edge.LEFT -> {
-                targetX = 0f
-                targetY = expandedY.coerceIn(0f, maxY)
+                expandedX = 0f
+                expandedY = expandedY.coerceIn(0f, maxY)
             }
             Edge.RIGHT -> {
-                targetX = maxX
-                targetY = expandedY.coerceIn(0f, maxY)
+                expandedX = maxX
+                expandedY = expandedY.coerceIn(0f, maxY)
             }
         }
-        expandedX = targetX
-        expandedY = targetY
-        collapsed = false
-        animate().x(targetX).y(targetY).setDuration(220L)
-            .setInterpolator(AccelerateDecelerateInterpolator())
-            .start()
     }
 
     private enum class Edge {
