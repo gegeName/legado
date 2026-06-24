@@ -43,8 +43,11 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        showLoadingProgress(true)
         binding.viewPager.adapter = adapter
+        binding.viewPager.offscreenPageLimit = 1
         binding.tabLayout.setupWithViewPager(binding.viewPager)
+        binding.tabLayout.isTabIndicatorFullWidth = false
         binding.tabLayout.setSelectedTabIndicatorColor(accentColor)
         viewModel.titleLiveData.observe(this) {
             binding.titleBar.title = it
@@ -72,7 +75,10 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
                 putExtra("key", viewModel.rssSource?.sourceUrl)
             }
 
-            R.id.menu_refresh_sort -> viewModel.clearSortCache { upFragments() }
+            R.id.menu_refresh_sort -> {
+                showLoadingProgress(true)
+                viewModel.clearSortCache { upFragments() }
+            }
             R.id.menu_set_source_variable -> setSourceVariable()
             R.id.menu_edit_source -> viewModel.rssSource?.sourceUrl?.let {
                 editSourceResult.launch {
@@ -99,6 +105,7 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
     }
 
     private fun upFragments() {
+        showLoadingProgress(true)
         lifecycleScope.launch {
             viewModel.rssSource?.sortUrls()?.let {
                 sortList.clear()
@@ -110,7 +117,21 @@ class RssSortActivity : VMBaseActivity<ActivityRssArtivlesBinding, RssSortViewMo
                 binding.tabLayout.visible()
             }
             adapter.notifyDataSetChanged()
+            if (sortList.isEmpty()) {
+                showLoadingProgress(false)
+            }
         }
+    }
+
+    fun showLoadingProgress(isLoading: Boolean) {
+        if (isLoading && !binding.refreshProgressBar.isAutoLoading
+            && binding.refreshProgressBar.getSecondDurProgress() == 0
+        ) {
+            binding.refreshProgressBar.setSecondDurProgress(
+                binding.refreshProgressBar.secondMaxProgress / 3
+            )
+        }
+        binding.refreshProgressBar.isAutoLoading = isLoading
     }
 
     private fun setSourceVariable() {

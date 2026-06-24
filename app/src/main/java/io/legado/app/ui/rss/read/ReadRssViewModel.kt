@@ -43,7 +43,9 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
 
     fun initData(intent: Intent) {
         execute {
-            val origin = intent.getStringExtra("origin") ?: return@execute
+            val origin = intent.getStringExtra("origin")
+                ?: intent.getStringExtra("link")
+                ?: return@execute
             val link = intent.getStringExtra("link")
             rssSource = appDb.rssSourceDao.getByKey(origin)
             headerMap = runScriptWithContext {
@@ -52,7 +54,7 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
             if (link != null) {
                 rssStar = appDb.rssStarDao.get(origin, link)
                 rssArticle = rssStar?.toRssArticle() ?: appDb.rssArticleDao.get(origin, link)
-                val rssArticle = rssArticle ?: return@execute
+                val rssArticle = rssArticle ?: return@execute loadUrl(link, origin)
                 if (!rssArticle.description.isNullOrBlank()) {
                     contentLiveData.postValue(rssArticle.description!!)
                 } else {
@@ -74,6 +76,7 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
                     rssArticle.origin = origin
                     rssArticle.link = origin
                     rssArticle.title = rssSource!!.sourceName
+                    this@ReadRssViewModel.rssArticle = rssArticle
                     loadContent(rssArticle, ruleContent)
                 }
             }
@@ -95,18 +98,19 @@ class ReadRssViewModel(application: Application) : BaseViewModel(application) {
 
     private fun loadContent(rssArticle: RssArticle, ruleContent: String) {
         val source = rssSource ?: return
-        Rss.getContent(viewModelScope, rssArticle, ruleContent, source)
-            .onSuccess(IO) { body ->
-                rssArticle.description = body
-                appDb.rssArticleDao.insert(rssArticle)
+            Rss.getContent(viewModelScope, rssArticle, ruleContent, source)
+                .onSuccess(IO) { body ->
+                    rssArticle.description = body
+                    appDb.rssArticleDao.insert(rssArticle)
                 rssStar?.let {
                     it.description = body
                     appDb.rssStarDao.insert(it)
+                    }
+                    contentLiveData.postValue(body)
+                }.onError {
+                    loadUrl(rssArticle.link, rssArticle.origin)
+                    context.toastOnUi("正文加载失败, 已切换到网页模式")
                 }
-                contentLiveData.postValue(body)
-            }.onError {
-                contentLiveData.postValue("加载正文失败\n${it.stackTraceToString()}")
-            }
     }
 
     fun refresh(finish: () -> Unit) {

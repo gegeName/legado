@@ -49,6 +49,7 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
             loadFinallyLiveData.postValue(hasMore)
             isLoading = false
         }.onError {
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             AppLog.put("rss获取内容失败", it)
             loadErrorLiveData.postValue(it.stackTraceStr)
@@ -60,6 +61,7 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
         page++
         val pageUrl = nextPageUrl
         if (pageUrl.isNullOrEmpty()) {
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             return
         }
@@ -68,6 +70,7 @@ class RssArticlesViewModel(application: Application) : BaseViewModel(application
             loadMoreSuccess(it.first)
             isLoading = false
         }.onError {
+            isLoading = false
             loadFinallyLiveData.postValue(false)
             AppLog.put("rss获取内容失败", it)
             loadErrorLiveData.postValue(it.stackTraceStr)

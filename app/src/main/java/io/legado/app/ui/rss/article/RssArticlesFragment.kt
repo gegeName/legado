@@ -120,8 +120,30 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
     }
 
     private fun loadArticles() {
+        showActivityLoadingProgress(true)
         activityViewModel.rssSource?.let {
             viewModel.loadArticles(it)
+        } ?: showActivityLoadingProgress(false)
+    }
+
+    private fun showActivityLoadingProgress(isLoading: Boolean) {
+        (activity as? RssSortActivity)?.showLoadingProgress(isLoading)
+    }
+
+    override fun onDestroyView() {
+        showActivityLoadingProgress(false)
+        super.onDestroyView()
+    }
+
+    override fun onPause() {
+        showActivityLoadingProgress(false)
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (viewModel.isLoading) {
+            showActivityLoadingProgress(true)
         }
     }
 
@@ -140,6 +162,7 @@ class RssArticlesFragment() : VMBaseFragment<RssArticlesViewModel>(R.layout.frag
             loadMoreView.error(it)
         }
         viewModel.loadFinallyLiveData.observe(viewLifecycleOwner) { hasMore ->
+            showActivityLoadingProgress(false)
             binding.refreshLayout.isRefreshing = false
             if (!hasMore) {
                 loadMoreView.noMore()

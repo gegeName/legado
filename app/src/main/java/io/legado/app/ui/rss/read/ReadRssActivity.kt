@@ -3,6 +3,7 @@ package io.legado.app.ui.rss.read
 import android.annotation.SuppressLint
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
+import android.graphics.Bitmap
 import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
@@ -20,6 +21,7 @@ import android.webkit.WebResourceResponse
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import android.widget.FrameLayout
 import androidx.activity.addCallback
 import androidx.activity.viewModels
 import androidx.core.view.WindowInsetsCompat
@@ -99,7 +101,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         viewModel.upStarMenuData.observe(this) { upStarMenu() }
         viewModel.upTtsMenuData.observe(this) { upTtsMenu(it) }
-        binding.titleBar.title = intent.getStringExtra("title")
+        binding.titleBar.title = intent.getStringExtra("title") ?: getString(R.string.loading)
+        startLoadingProgress()
         initView()
         initWebView()
         initLiveData()
@@ -222,11 +225,17 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
         binding.webView.webChromeClient = CustomWebChromeClient()
         binding.webView.webViewClient = CustomWebViewClient()
         binding.webView.settings.apply {
+            updateCacheMode()
             mixedContentMode = WebSettings.MIXED_CONTENT_ALWAYS_ALLOW
             domStorageEnabled = true
             allowContentAccess = true
+            loadsImagesAutomatically = true
+            mediaPlaybackRequiresUserGesture = false
             builtInZoomControls = true
             displayZoomControls = false
+            javaScriptCanOpenWindowsAutomatically = false
+            setSupportMultipleWindows(false)
+            setGeolocationEnabled(false)
             setDarkeningAllowed(AppConfig.isNightTheme)
         }
         binding.webView.addJavascriptInterface(this, "thisActivity")
@@ -287,7 +296,9 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     private fun initLiveData() {
         viewModel.contentLiveData.observe(this) { content ->
             viewModel.rssArticle?.let {
-                upJavaScriptEnable()
+                startLoadingProgress()
+                updateSubtitle()
+                upJavaScriptEnable(force = shouldEnableJsForContent(content))
                 val url = NetworkUtils.getAbsoluteURL(it.origin, it.link)
                 val html = viewModel.clHtml(content)
                 binding.webView.settings.userAgentString =
@@ -302,16 +313,51 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
             }
         }
         viewModel.urlLiveData.observe(this) {
-            upJavaScriptEnable()
+            startLoadingProgress()
+            updateSubtitle(it.url)
+            upJavaScriptEnable(force = true)
             CookieManager.applyToWebView(it.url)
             binding.webView.settings.userAgentString = it.getUserAgent()
             binding.webView.loadUrl(it.url, it.headerMap)
         }
     }
 
-    @SuppressLint("SetJavaScriptEnabled")
-    private fun upJavaScriptEnable() {
+    private fun startLoadingProgress() {
+        updateCacheMode()
+        binding.progressBar.visible()
+        binding.progressBar.setDurProgress(8)
+    }
+
+    private fun finishLoadingProgress() {
+        binding.progressBar.setDurProgress(100)
+        binding.progressBar.gone()
+    }
+
+    private fun updateSubtitle(url: String? = binding.webView.url) {
+        binding.titleBar.subtitle = viewModel.rssSource?.sourceName
+            ?: url?.let { Uri.parse(it).host }
+    }
+
+    private fun updateCacheMode() {
+        binding.webView.settings.cacheMode = if (NetworkUtils.isAvailable()) {
+            WebSettings.LOAD_DEFAULT
+        } else {
+            WebSettings.LOAD_CACHE_ELSE_NETWORK
+        }
+    }
+
+    private fun shouldEnableJsForContent(content: String): Boolean {
         if (viewModel.rssSource?.enableJs == true) {
+            return true
+        }
+        return content.contains(
+            "<\\s*(script|iframe|embed|object)\\b".toRegex(RegexOption.IGNORE_CASE)
+        )
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun upJavaScriptEnable(force: Boolean = false) {
+        if (force || viewModel.rssSource?.enableJs == true) {
             binding.webView.settings.javaScriptEnabled = true
         }
     }
@@ -361,22 +407,56 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     override fun onDestroy() {
-        super.onDestroy()
+        if (binding.customWebView.size > 0) {
+            customWebViewCallback?.onCustomViewHidden()
+        }
+        binding.webView.stopLoading()
+        binding.webView.onPause()
+        binding.webView.webChromeClient = null
+        binding.webView.webViewClient = WebViewClient()
         binding.webView.destroy()
+        super.onDestroy()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        binding.webView.onResume()
+        binding.webView.resumeTimers()
+    }
+
+    override fun onPause() {
+        binding.webView.onPause()
+        super.onPause()
     }
 
     inner class CustomWebChromeClient : WebChromeClient() {
 
         override fun onProgressChanged(view: WebView?, newProgress: Int) {
             super.onProgressChanged(view, newProgress)
+            binding.progressBar.visible()
             binding.progressBar.setDurProgress(newProgress)
             binding.progressBar.gone(newProgress == 100)
         }
 
         override fun onShowCustomView(view: View?, callback: CustomViewCallback?) {
+            if (view == null) {
+                callback?.onCustomViewHidden()
+                return
+            }
+            if (binding.customWebView.size > 0) {
+                customWebViewCallback?.onCustomViewHidden()
+            }
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_SENSOR
             binding.llView.invisible()
-            binding.customWebView.addView(view)
+            binding.customWebView.visible()
+            binding.customWebView.removeAllViews()
+            binding.customWebView.addView(
+                view,
+                FrameLayout.LayoutParams(
+                    FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT
+                )
+            )
             customWebViewCallback = callback
             keepScreenOn(true)
             toggleSystemBar(false)
@@ -384,6 +464,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onHideCustomView() {
             binding.customWebView.removeAllViews()
+            binding.customWebView.gone()
+            customWebViewCallback = null
             binding.llView.visible()
             requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             keepScreenOn(false)
@@ -392,6 +474,12 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
     }
 
     inner class CustomWebViewClient : WebViewClient() {
+
+        override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
+            super.onPageStarted(view, url, favicon)
+            startLoadingProgress()
+            updateSubtitle(url)
+        }
 
         override fun shouldOverrideUrlLoading(
             view: WebView,
@@ -448,6 +536,8 @@ class ReadRssActivity : VMBaseActivity<ActivityRssReadBinding, ReadRssViewModel>
 
         override fun onPageFinished(view: WebView, url: String) {
             super.onPageFinished(view, url)
+            finishLoadingProgress()
+            updateSubtitle(url)
             view.title?.let { title ->
                 if (title != url
                     && title != view.url
