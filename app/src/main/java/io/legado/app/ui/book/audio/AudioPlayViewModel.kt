@@ -17,6 +17,7 @@ import io.legado.app.help.book.removeType
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.webBook.WebBook
+import io.legado.app.service.AudioPlayService
 import io.legado.app.utils.postEvent
 import io.legado.app.utils.toastOnUi
 
@@ -24,14 +25,26 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
     val titleData = MutableLiveData<String>()
     val coverData = MutableLiveData<String>()
 
-    fun initData(intent: Intent) = AudioPlay.apply {
+    fun initData(intent: Intent) {
+        val intentBookUrl = intent.getStringExtra("bookUrl")
+        val currentBook = AudioPlay.book
+        if (AudioPlayService.isRun
+            && currentBook != null
+            && (intentBookUrl.isNullOrBlank() || intentBookUrl == currentBook.bookUrl)
+        ) {
+            AudioPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", AudioPlay.inBookshelf)
+            titleData.postValue(currentBook.name)
+            coverData.postValue(currentBook.getDisplayCover())
+            AudioPlay.upDurChapter()
+            return
+        }
         execute {
-            val bookUrl = intent.getStringExtra("bookUrl") ?: book?.bookUrl ?: return@execute
+            val bookUrl = intentBookUrl ?: AudioPlay.book?.bookUrl ?: return@execute
             val book = appDb.bookDao.getBook(bookUrl) ?: return@execute
-            inBookshelf = intent.getBooleanExtra("inBookshelf", true)
+            AudioPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", true)
             initBook(book)
         }.onFinally {
-            saveRead()
+            AudioPlay.saveRead()
         }
     }
 

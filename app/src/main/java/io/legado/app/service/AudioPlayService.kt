@@ -141,6 +141,7 @@ class AudioPlayService : BaseService(),
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         intent?.action?.let { action ->
             when (action) {
                 IntentAction.play -> {
@@ -179,18 +180,25 @@ class AudioPlayService : BaseService(),
                     adjustProgress(intent.getIntExtra("position", position))
                 }
 
-                IntentAction.stop -> stopSelf()
+                IntentAction.stop -> {
+                    stopSelf()
+                }
             }
         }
-        return super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        if (pause) {
+            stopSelf()
+        } else {
+            upAudioPlayNotification()
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         isRun = false
         abandonFocus()
         exoPlayer.release()
@@ -210,10 +218,7 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint("WakelockTimeout")
     private fun play() {
-        if (useWakeLock) {
-            wakeLock.acquire()
-            wifiLock?.acquire()
-        }
+        acquireWakeLocks()
         upAudioPlayNotification()
         if (!requestFocus()) {
             return
@@ -244,10 +249,7 @@ class AudioPlayService : BaseService(),
      * 暂停播放
      */
     private fun pause(abandonFocus: Boolean = true) {
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         try {
             pause = true
             if (abandonFocus) {
@@ -270,10 +272,7 @@ class AudioPlayService : BaseService(),
      */
     @SuppressLint("WakelockTimeout")
     private fun resume() {
-        if (useWakeLock) {
-            wakeLock.acquire()
-            wifiLock?.acquire()
-        }
+        acquireWakeLocks()
         try {
             pause = false
             if (url.isEmpty()) {
@@ -291,6 +290,39 @@ class AudioPlayService : BaseService(),
         } catch (e: Exception) {
             e.printOnDebug()
             stopSelf()
+        }
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun acquireWakeLocks() {
+        if (!useWakeLock) return
+        runCatching {
+            if (!wakeLock.isHeld) {
+                wakeLock.acquire()
+            }
+            wifiLock?.let {
+                if (!it.isHeld) {
+                    it.acquire()
+                }
+            }
+        }.onFailure {
+            AppLog.put("获取音频播放唤醒锁出错\n${it.localizedMessage}", it)
+        }
+    }
+
+    private fun releaseWakeLocks() {
+        if (!useWakeLock) return
+        runCatching {
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+            wifiLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                }
+            }
+        }.onFailure {
+            AppLog.put("释放音频播放唤醒锁出错\n${it.localizedMessage}", it)
         }
     }
 
@@ -487,7 +519,9 @@ class AudioPlayService : BaseService(),
                 action ?: return
 
                 when (action) {
-                    APP_ACTION_STOP -> stopSelf()
+                    APP_ACTION_STOP -> {
+                        stopSelf()
+                    }
                     APP_ACTION_TIMER -> addTimer()
                 }
             }
@@ -575,7 +609,14 @@ class AudioPlayService : BaseService(),
             .setContentTitle(nTitle)
             .setContentText(nSubtitle)
             .setContentIntent(
-                activityPendingIntent<AudioPlayActivity>("activity")
+                activityPendingIntent<AudioPlayActivity>("activity") {
+                    AudioPlay.book?.let { book ->
+                        putExtra("bookUrl", book.bookUrl)
+                        putExtra("inBookshelf", AudioPlay.inBookshelf)
+                        putExtra("fromNotification", true)
+                        putExtra("resumeOnOpen", !pause)
+                    }
+                }
             )
         builder.setLargeIcon(cover)
         if (pause) {

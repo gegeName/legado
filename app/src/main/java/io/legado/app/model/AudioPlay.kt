@@ -74,6 +74,11 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun upData(book: Book) {
+        val keepPlaying = AudioPlay.book?.bookUrl == book.bookUrl && AudioPlayService.isRun
+        if (keepPlaying) {
+            book.durChapterIndex = durChapterIndex
+            book.durChapterPos = durChapterPos
+        }
         AudioPlay.book = book
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
         simulatedChapterSize = if (book.readSimulating()) {
@@ -81,7 +86,7 @@ object AudioPlay : CoroutineScope by MainScope() {
         } else {
             chapterSize
         }
-        if (durChapterIndex != book.durChapterIndex) {
+        if (!keepPlaying && durChapterIndex != book.durChapterIndex) {
             stopPlay()
             durChapterIndex = book.durChapterIndex
             durChapterPos = book.durChapterPos
@@ -240,6 +245,7 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun stop() {
+        coroutineContext.cancelChildren()
         if (AudioPlayService.isRun) {
             context.startService<AudioPlayService> {
                 action = IntentAction.stop
@@ -269,8 +275,8 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun skipTo(index: Int) {
         Coroutine.async {
-            stopPlay()
             if (index in 0..<simulatedChapterSize) {
+                stopPlay()
                 durChapterIndex = index
                 durChapterPos = 0
                 durPlayUrl = ""
@@ -282,8 +288,8 @@ object AudioPlay : CoroutineScope by MainScope() {
 
     fun prev() {
         Coroutine.async {
-            stopPlay()
             if (durChapterIndex > 0) {
+                stopPlay()
                 durChapterIndex -= 1
                 durChapterPos = 0
                 durPlayUrl = ""
@@ -294,10 +300,10 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun next() {
-        stopPlay()
         when (playMode) {
             PlayMode.LIST_END_STOP -> {
                 if (durChapterIndex + 1 < simulatedChapterSize) {
+                    stopPlay()
                     durChapterIndex += 1
                     durChapterPos = 0
                     durPlayUrl = ""
@@ -307,6 +313,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             }
 
             PlayMode.SINGLE_LOOP -> {
+                stopPlay()
                 durChapterPos = 0
                 durPlayUrl = ""
                 saveRead()
@@ -314,6 +321,10 @@ object AudioPlay : CoroutineScope by MainScope() {
             }
 
             PlayMode.RANDOM -> {
+                if (simulatedChapterSize <= 0) {
+                    return
+                }
+                stopPlay()
                 durChapterIndex = (0 until simulatedChapterSize).random()
                 durChapterPos = 0
                 durPlayUrl = ""
@@ -322,6 +333,10 @@ object AudioPlay : CoroutineScope by MainScope() {
             }
 
             PlayMode.LIST_LOOP -> {
+                if (simulatedChapterSize <= 0) {
+                    return
+                }
+                stopPlay()
                 durChapterIndex = (durChapterIndex + 1) % simulatedChapterSize
                 durChapterPos = 0
                 durPlayUrl = ""
@@ -413,7 +428,6 @@ object AudioPlay : CoroutineScope by MainScope() {
             activityContext = null
             callback = null
         }
-        coroutineContext.cancelChildren()
     }
 
     fun registerService(context: Context) {

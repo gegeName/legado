@@ -72,6 +72,14 @@ abstract class BaseReadAloudService : BaseService(),
     AudioManager.OnAudioFocusChangeListener {
 
     companion object {
+        private const val READ_ALOUD_MEDIA_SESSION_ACTIONS =
+            PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS or
+                    PlaybackStateCompat.ACTION_PLAY or
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE or
+                    PlaybackStateCompat.ACTION_PAUSE or
+                    PlaybackStateCompat.ACTION_STOP or
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT
+
         @JvmStatic
         var isRun = false
             private set
@@ -92,7 +100,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     }
 
-    private val useWakeLock = appCtx.getPrefBoolean(PreferKey.readAloudWakeLock, false)
+    private val useWakeLock = appCtx.getPrefBoolean(PreferKey.readAloudWakeLock, true)
     private val wakeLock by lazy {
         powerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "legado:ReadAloudService")
             .apply {
@@ -188,10 +196,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     override fun onDestroy() {
         super.onDestroy()
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         isRun = false
         pause = true
         abandonFocus()
@@ -208,6 +213,7 @@ abstract class BaseReadAloudService : BaseService(),
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        super.onStartCommand(intent, flags, startId)
         when (intent?.action) {
             IntentAction.play -> newReadAloud(
                 intent.getBooleanExtra("play", true),
@@ -226,7 +232,16 @@ abstract class BaseReadAloudService : BaseService(),
             IntentAction.setTimer -> setTimer(intent.getIntExtra("minute", 0))
             IntentAction.stop -> stopSelf()
         }
-        return super.onStartCommand(intent, flags, startId)
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        LogUtils.d(TAG, "onTaskRemoved pause:$pause")
+        if (pause) {
+            stopSelf()
+        } else {
+            upReadAloudNotification()
+        }
     }
 
     private fun newReadAloud(play: Boolean, pageIndex: Int, startPos: Int) {
@@ -277,10 +292,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @SuppressLint("WakelockTimeout")
     open fun play() {
-        if (useWakeLock) {
-            wakeLock.acquire()
-            wifiLock?.acquire()
-        }
+        acquireWakeLocks()
         isRun = true
         pause = false
         needResumeOnAudioFocusGain = false
@@ -294,10 +306,7 @@ abstract class BaseReadAloudService : BaseService(),
 
     @CallSuper
     open fun pauseReadAloud(abandonFocus: Boolean = true) {
-        if (useWakeLock) {
-            wakeLock.release()
-            wifiLock?.release()
-        }
+        releaseWakeLocks()
         pause = true
         if (abandonFocus) {
             abandonFocus()
@@ -307,6 +316,39 @@ abstract class BaseReadAloudService : BaseService(),
         postEvent(EventBus.ALOUD_STATE, Status.PAUSE)
         ReadBook.uploadProgress()
         doDs()
+    }
+
+    @SuppressLint("WakelockTimeout")
+    private fun acquireWakeLocks() {
+        if (!useWakeLock) return
+        runCatching {
+            if (!wakeLock.isHeld) {
+                wakeLock.acquire()
+            }
+            wifiLock?.let {
+                if (!it.isHeld) {
+                    it.acquire()
+                }
+            }
+        }.onFailure {
+            AppLog.put("获取朗读唤醒锁出错\n${it.localizedMessage}", it)
+        }
+    }
+
+    private fun releaseWakeLocks() {
+        if (!useWakeLock) return
+        runCatching {
+            if (wakeLock.isHeld) {
+                wakeLock.release()
+            }
+            wifiLock?.let {
+                if (it.isHeld) {
+                    it.release()
+                }
+            }
+        }.onFailure {
+            AppLog.put("释放朗读唤醒锁出错\n${it.localizedMessage}", it)
+        }
     }
 
     @SuppressLint("WakelockTimeout")
@@ -460,8 +502,8 @@ abstract class BaseReadAloudService : BaseService(),
     private fun upMediaSessionPlaybackState(state: Int) {
         mediaSessionCompat.setPlaybackState(
             PlaybackStateCompat.Builder()
-                .setActions(MediaHelp.MEDIA_SESSION_ACTIONS)
-                .setState(state, nowSpeak.toLong(), 1f)
+                .setActions(READ_ALOUD_MEDIA_SESSION_ACTIONS)
+                .setState(state, PlaybackStateCompat.PLAYBACK_POSITION_UNKNOWN, 1f)
                 // 为系统媒体控件添加定时按钮
                 .addCustomAction(
                     PlaybackStateCompat.CustomAction.Builder(
@@ -594,10 +636,7 @@ abstract class BaseReadAloudService : BaseService(),
     private fun choiceMediaStyle(): androidx.media.app.NotificationCompat.MediaStyle {
         val mediaStyle = androidx.media.app.NotificationCompat.MediaStyle()
             .setShowActionsInCompactView(1, 2, 4)
-        if (getPrefBoolean("systemMediaControlCompatibilityChange")) {
-            //fix #4090 android 14 can not show play control in lock screen
-            mediaStyle.setMediaSession(mediaSessionCompat.sessionToken)
-        }
+            .setMediaSession(mediaSessionCompat.sessionToken)
         return mediaStyle
     }
 

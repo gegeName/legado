@@ -15,6 +15,7 @@ import androidx.lifecycle.lifecycleScope
 import io.legado.app.R
 import io.legado.app.constant.AppLog
 import io.legado.app.exception.NoStackTraceException
+import io.legado.app.utils.SystemUtils
 import io.legado.app.utils.registerForActivityResult
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.launch
@@ -89,15 +90,10 @@ class PermissionActivity : AppCompatActivity() {
                             && requestPermissionResult.launch(Permissions.POST_NOTIFICATIONS)
                         ) {
                             onRequestPermissionFinish()
-                        } else if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                            //这种方案适用于 API 26, 即8.0（含8.0）以上可以用
-                            val intent = Intent()
-                            intent.action = Settings.ACTION_APP_NOTIFICATION_SETTINGS
-                            intent.putExtra(Settings.EXTRA_APP_PACKAGE, packageName)
-                            intent.putExtra(Settings.EXTRA_CHANNEL_ID, applicationInfo.uid)
-                            settingActivityResult.launch(intent)
                         } else {
-                            openSettingsActivity()
+                            settingActivityResult.launch(
+                                SystemUtils.appNotificationSettingsIntent(this@PermissionActivity)
+                            )
                         }
                     } catch (e: Exception) {
                         AppLog.put("请求通知权限出错\n$e", e, true)

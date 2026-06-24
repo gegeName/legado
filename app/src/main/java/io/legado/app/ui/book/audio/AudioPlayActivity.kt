@@ -1,6 +1,7 @@
 package io.legado.app.ui.book.audio
 
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.os.Build
 import android.os.Bundle
 import android.view.Gravity
@@ -47,6 +48,7 @@ import io.legado.app.utils.toDurationTime
 import io.legado.app.utils.viewbindingdelegate.viewBinding
 import io.legado.app.utils.visible
 import kotlinx.coroutines.Dispatchers.IO
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import splitties.views.onLongClick
@@ -81,7 +83,7 @@ class AudioPlayActivity :
             if (it.resultCode == RESULT_OK) {
                 viewModel.upSource()
             }
-        }
+    }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         binding.titleBar.setBackgroundResource(R.color.transparent)
@@ -92,8 +94,30 @@ class AudioPlayActivity :
         viewModel.coverData.observe(this) {
             upCover(it)
         }
-        viewModel.initData(intent)
+        handleIntent(intent)
         initView()
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        handleIntent(intent)
+    }
+
+    private fun handleIntent(intent: Intent) {
+        val resumeAfterOpen = (AudioPlayService.isRun && !AudioPlayService.pause)
+                || (intent.getBooleanExtra("fromNotification", false)
+                && intent.getBooleanExtra("resumeOnOpen", false))
+        viewModel.initData(intent)
+        if (resumeAfterOpen) {
+            AudioPlay.resume(this)
+            lifecycleScope.launch {
+                delay(500)
+                if (AudioPlayService.isRun && AudioPlayService.pause) {
+                    AudioPlay.resume(this@AudioPlayActivity)
+                }
+            }
+        }
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
@@ -255,9 +279,6 @@ class AudioPlayActivity :
 
     override fun onDestroy() {
         super.onDestroy()
-        if (AudioPlay.status != Status.PLAY) {
-            AudioPlay.stop()
-        }
         AudioPlay.unregister(this)
     }
 

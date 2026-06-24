@@ -21,6 +21,7 @@ import io.legado.app.utils.servicePendingIntent
 import io.legado.app.utils.toastOnUi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.ensureActive
+import java.util.concurrent.ConcurrentHashMap
 
 /**
  * 本地朗读
@@ -31,6 +32,7 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
     private var ttsInitFinish = false
     private val ttsUtteranceListener = TTSUtteranceListener()
     private var speakJob: Coroutine<*>? = null
+    private val speakItems = ConcurrentHashMap<String, SpeakItem>()
     private val TAG = "TTSReadAloudService"
 
     override fun onCreate() {
@@ -100,40 +102,64 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
             val tts = textToSpeech ?: throw NoStackTraceException("tts is null")
             val contentList = contentList
             var isAddedText = false
+            speakItems.clear()
+            val maxLength = (TextToSpeech.getMaxSpeechInputLength() - 100)
+                .coerceAtMost(1200)
+                .coerceAtLeast(1)
+            var chapterPos = readAloudNumber
             for (i in nowSpeak until contentList.size) {
                 ensureActive()
-                var text = contentList[i]
-                if (paragraphStartPos > 0 && i == nowSpeak) {
-                    text = text.substring(paragraphStartPos)
+                val paragraph = contentList[i]
+                val startPos = if (i == nowSpeak) {
+                    paragraphStartPos.coerceAtMost(paragraph.length)
+                } else {
+                    0
                 }
+                val text = paragraph.substring(startPos)
                 if (text.matches(AppPattern.notReadAloudRegex)) {
+                    chapterPos += paragraph.length + 1 - startPos
                     continue
                 }
-                if (!isAddedText) {
+                var textStart = 0
+                var chunkNo = 0
+                while (textStart < text.length) {
+                    ensureActive()
+                    val textEnd = (textStart + maxLength).coerceAtMost(text.length)
+                    val chunk = text.substring(textStart, textEnd)
+                    val utteranceId = "${AppConst.APP_TAG}${i}_$chunkNo"
+                    speakItems[utteranceId] = SpeakItem(
+                        index = i,
+                        chapterPos = chapterPos + textStart,
+                        paragraphStartPos = startPos + textStart,
+                        textLength = chunk.length,
+                        isParagraphEnd = textEnd >= text.length
+                    )
                     val result = tts.runCatching {
-                        speak(text, TextToSpeech.QUEUE_FLUSH, null, AppConst.APP_TAG + i)
+                        speak(
+                            chunk,
+                            if (isAddedText) TextToSpeech.QUEUE_ADD else TextToSpeech.QUEUE_FLUSH,
+                            null,
+                            utteranceId
+                        )
                     }.getOrElse {
                         AppLog.put("tts出错\n${it.localizedMessage}", it, true)
                         TextToSpeech.ERROR
                     }
                     if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts出错 尝试重新初始化")
-                        clearTTS()
-                        initTts()
-                        return@execute
+                        if (!isAddedText) {
+                            AppLog.put("tts出错 尝试重新初始化")
+                            clearTTS()
+                            initTts()
+                            return@execute
+                        } else {
+                            AppLog.put("tts朗读出错:$chunk")
+                        }
                     }
-                } else {
-                    val result = tts.runCatching {
-                        speak(text, TextToSpeech.QUEUE_ADD, null, AppConst.APP_TAG + i)
-                    }.getOrElse {
-                        AppLog.put("tts出错\n${it.localizedMessage}", it, true)
-                        TextToSpeech.ERROR
-                    }
-                    if (result == TextToSpeech.ERROR) {
-                        AppLog.put("tts朗读出错:$text")
-                    }
+                    isAddedText = true
+                    textStart = textEnd
+                    chunkNo++
                 }
-                isAddedText = true
+                chapterPos += paragraph.length + 1 - startPos
             }
             LogUtils.d(TAG, "朗读内容添加完成")
             if (!isAddedText) {
@@ -195,6 +221,11 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onStart(s: String) {
             LogUtils.d(TAG, "onStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$s")
+            speakItems[s]?.let {
+                nowSpeak = it.index
+                readAloudNumber = it.chapterPos
+                paragraphStartPos = it.paragraphStartPos
+            }
             textChapter?.let {
                 if (contentList[nowSpeak].matches(AppPattern.notReadAloudRegex)) {
                     nextParagraph()
@@ -211,7 +242,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
 
         override fun onDone(s: String) {
             LogUtils.d(TAG, "onDone utteranceId:$s")
-            nextParagraph()
+            speakItems.remove(s)?.let {
+                if (it.isParagraphEnd) {
+                    nextParagraph()
+                } else {
+                    nowSpeak = it.index
+                    readAloudNumber = it.chapterPos + it.textLength
+                    paragraphStartPos = it.paragraphStartPos + it.textLength
+                }
+            } ?: nextParagraph()
         }
 
         override fun onRangeStart(utteranceId: String?, start: Int, end: Int, frame: Int) {
@@ -220,12 +259,14 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 "onRangeStart nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId start:$start end:$end frame:$frame"
             LogUtils.d(TAG, msg)
             textChapter?.let {
+                val chapterStart = speakItems[utteranceId]?.chapterPos ?: readAloudNumber
+                val chapterProgress = chapterStart + start
                 if (pageIndex + 1 < it.pageSize
-                    && readAloudNumber + start > it.getReadLength(pageIndex + 1)
+                    && chapterProgress > it.getReadLength(pageIndex + 1)
                 ) {
                     pageIndex++
                     ReadBook.moveToNextPage()
-                    upTtsProgress(readAloudNumber + start)
+                    upTtsProgress(chapterProgress)
                 }
             }
         }
@@ -235,7 +276,15 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
                 TAG,
                 "onError nowSpeak:$nowSpeak pageIndex:$pageIndex utteranceId:$utteranceId errorCode:$errorCode"
             )
-            nextParagraph()
+            speakItems.remove(utteranceId)?.let {
+                if (it.isParagraphEnd) {
+                    nextParagraph()
+                } else {
+                    nowSpeak = it.index
+                    readAloudNumber = it.chapterPos + it.textLength
+                    paragraphStartPos = it.paragraphStartPos + it.textLength
+                }
+            } ?: nextParagraph()
         }
 
         private fun nextParagraph() {
@@ -254,10 +303,18 @@ class TTSReadAloudService : BaseReadAloudService(), TextToSpeech.OnInitListener 
         @Deprecated("Deprecated in Java")
         override fun onError(s: String) {
             LogUtils.d(TAG, "onError nowSpeak:$nowSpeak pageIndex:$pageIndex s:$s")
-            nextParagraph()
+            onError(s, TextToSpeech.ERROR)
         }
 
     }
+
+    private data class SpeakItem(
+        val index: Int,
+        val chapterPos: Int,
+        val paragraphStartPos: Int,
+        val textLength: Int,
+        val isParagraphEnd: Boolean
+    )
 
     override fun aloudServicePendingIntent(actionStr: String): PendingIntent? {
         return servicePendingIntent<TTSReadAloudService>(actionStr)
