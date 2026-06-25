@@ -74,21 +74,12 @@ object AudioPlay : CoroutineScope by MainScope() {
     private var preloadingChapterKey: String? = null
     private var noPreloadChapterKey: String? = null
     private val failedPlayChapterKeys = Collections.synchronizedSet(hashSetOf<String>())
-    private var ignoreMediaPreviousUntil = 0L
     var hideMiniPlayerWhenPaused = false
 
     fun changePlayMode() {
         playMode = playMode.next()
         clearPreload()
         postEvent(EventBus.PLAY_MODE_CHANGED, playMode)
-    }
-
-    fun ignoreMediaPreviousTemporarily(duration: Long = 5_000L) {
-        ignoreMediaPreviousUntil = System.currentTimeMillis() + duration
-    }
-
-    fun shouldIgnoreMediaPrevious(): Boolean {
-        return System.currentTimeMillis() < ignoreMediaPreviousUntil
     }
 
     fun upData(book: Book) {
@@ -339,9 +330,6 @@ object AudioPlay : CoroutineScope by MainScope() {
     }
 
     fun prev() {
-        if (shouldIgnoreMediaPrevious()) {
-            return
-        }
         Coroutine.async {
             if (durChapterIndex > 0) {
                 stopPlay()

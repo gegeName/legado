@@ -535,11 +535,7 @@ class AudioPlayService : BaseService(),
                     return true
                 }
                 when (keyEvent.keyCode) {
-                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                        if (!AudioPlay.shouldIgnoreMediaPrevious()) {
-                            AudioPlay.prev()
-                        }
-                    }
+                    KeyEvent.KEYCODE_MEDIA_PREVIOUS -> AudioPlay.prev()
                     KeyEvent.KEYCODE_MEDIA_NEXT -> AudioPlay.next()
                     else -> if (pause) resume() else pause()
                 }
@@ -550,11 +546,7 @@ class AudioPlayService : BaseService(),
 
             override fun onPause() = pause()
 
-            override fun onSkipToPrevious() {
-                if (!AudioPlay.shouldIgnoreMediaPrevious()) {
-                    AudioPlay.prev()
-                }
-            }
+            override fun onSkipToPrevious() = AudioPlay.prev()
 
             override fun onSkipToNext() {
                 AudioPlay.next()

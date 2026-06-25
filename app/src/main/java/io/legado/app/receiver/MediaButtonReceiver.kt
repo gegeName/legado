@@ -44,11 +44,7 @@ class MediaButtonReceiver : BroadcastReceiver() {
                 if (action == KeyEvent.ACTION_DOWN) {
                     if (AudioPlayService.isRun) {
                         when (keycode) {
-                            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> {
-                                if (!AudioPlay.shouldIgnoreMediaPrevious()) {
-                                    AudioPlay.prev()
-                                }
-                            }
+                            KeyEvent.KEYCODE_MEDIA_PREVIOUS -> AudioPlay.prev()
 
                             KeyEvent.KEYCODE_MEDIA_NEXT -> {
                                 AudioPlay.next()

@@ -240,7 +240,8 @@ abstract class BaseActivity<VB : ViewBinding>(
             this is AudioPlayActivity ||
             !AudioPlayService.isRun ||
             AudioPlay.book == null ||
-            AudioPlay.hideMiniPlayerWhenPaused && AudioPlay.status != Status.PLAY
+            AudioPlay.hideMiniPlayerWhenPaused &&
+            (AudioPlayService.pause || AudioPlay.status != Status.PLAY)
         ) {
             miniAudioPlayerView?.visibility = View.GONE
             miniAudioPlayerView?.setPlaying(false)
