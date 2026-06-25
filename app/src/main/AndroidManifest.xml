@@ -241,8 +241,7 @@
         <!-- 目录 -->
         <activity
             android:name=".ui.book.toc.TocActivity"
-            android:launchMode="singleTop"
-            android:screenOrientation="behind" />
+            android:launchMode="singleTop" />
         <!-- 正文搜索 -->
         <activity
             android:name=".ui.book.searchContent.SearchContentActivity"

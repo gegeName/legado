@@ -5,6 +5,7 @@ import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
+import android.util.AttributeSet
 import android.view.Gravity
 import android.view.MotionEvent
 import android.view.View
@@ -20,7 +21,10 @@ import io.legado.app.utils.dpToPx
 import kotlin.math.abs
 import kotlin.math.min
 
-class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
+class MiniAudioPlayerView @JvmOverloads constructor(
+    context: Context,
+    attrs: AttributeSet? = null
+) : FrameLayout(context, attrs) {
 
     private val coverView = CircleImageView(context).apply {
         borderWidth = 2.dpToPx()
@@ -59,6 +63,9 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
     private var playing = false
     private var coverPath: String? = null
     private var sourceOrigin: String? = null
+    private var dragEnabled = true
+    private var autoHideEnabled = true
+    private val coverInset = 8.dpToPx()
     private val autoHideRunnable = Runnable { collapseToEdge() }
     private val rotateAnimator = ObjectAnimator.ofFloat(coverView, View.ROTATION, 0f, 360f).apply {
         duration = 6_000L
@@ -70,14 +77,31 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
         setWillNotDraw(false)
         isClickable = true
         elevation = 8f.dpToPx()
-        val size = 76.dpToPx()
         addView(
             coverView,
-            LayoutParams(size, size, Gravity.START or Gravity.BOTTOM).apply {
-                marginStart = 8.dpToPx()
-                bottomMargin = 8.dpToPx()
-            }
+            LayoutParams(0, 0, Gravity.CENTER)
         )
+    }
+
+    fun setDragEnabled(enabled: Boolean) {
+        dragEnabled = enabled
+        if (!enabled) {
+            dragging = false
+            collapsed = false
+            removeCallbacks(autoHideRunnable)
+            animate().cancel()
+        }
+    }
+
+    fun setAutoHideEnabled(enabled: Boolean) {
+        autoHideEnabled = enabled
+        if (enabled) {
+            scheduleAutoHide()
+        } else {
+            collapsed = false
+            removeCallbacks(autoHideRunnable)
+            animate().cancel()
+        }
     }
 
     fun setPlaying(isPlaying: Boolean) {
@@ -113,7 +137,7 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
     override fun onVisibilityChanged(changedView: View, visibility: Int) {
         super.onVisibilityChanged(changedView, visibility)
         if (changedView != this) return
-        if (visibility == VISIBLE) {
+        if (visibility == VISIBLE && autoHideEnabled) {
             scheduleAutoHide()
         } else {
             removeCallbacks(autoHideRunnable)
@@ -122,6 +146,12 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
     }
 
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        if (!dragEnabled) {
+            if (event.actionMasked == MotionEvent.ACTION_UP) {
+                performClick()
+            }
+            return isClickable
+        }
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 parent?.requestDisallowInterceptTouchEvent(true)
@@ -191,14 +221,34 @@ class MiniAudioPlayerView(context: Context) : FrameLayout(context) {
     override fun onDraw(canvas: Canvas) {
         val discCx = width / 2f
         val discCy = height / 2f
-        val discR = min(39f.dpToPx(), height * 0.36f)
-        canvas.drawCircle(discCx + 2f.dpToPx(), discCy + 4f.dpToPx(), discR, discShadowPaint)
+        val size = min(width, height).toFloat()
+        val scale = size / 92f.dpToPx()
+        val discR = size * 0.36f
+        discPaint.strokeWidth = 7f.dpToPx() * scale
+        discLightPaint.strokeWidth = 1.2f.dpToPx() * scale
+        canvas.drawCircle(
+            discCx + 2f.dpToPx() * scale,
+            discCy + 4f.dpToPx() * scale,
+            discR,
+            discShadowPaint
+        )
         canvas.drawCircle(discCx, discCy, discR, discPaint)
-        canvas.drawCircle(discCx, discCy, discR - 9f.dpToPx(), discLightPaint)
-        canvas.drawCircle(discCx, discCy, 5f.dpToPx(), knobPaint)
+        canvas.drawCircle(discCx, discCy, discR - 9f.dpToPx() * scale, discLightPaint)
+        canvas.drawCircle(discCx, discCy, 5f.dpToPx() * scale, knobPaint)
+    }
+
+    override fun onSizeChanged(w: Int, h: Int, oldw: Int, oldh: Int) {
+        super.onSizeChanged(w, h, oldw, oldh)
+        val coverSize = (min(w, h) - coverInset * 2).coerceAtLeast(0)
+        coverView.layoutParams = (coverView.layoutParams as LayoutParams).apply {
+            width = coverSize
+            height = coverSize
+            gravity = Gravity.CENTER
+        }
     }
 
     private fun scheduleAutoHide() {
+        if (!autoHideEnabled) return
         removeCallbacks(autoHideRunnable)
         postDelayed(autoHideRunnable, AUTO_HIDE_DELAY)
     }

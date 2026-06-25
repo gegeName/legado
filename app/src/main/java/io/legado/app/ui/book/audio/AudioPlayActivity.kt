@@ -159,6 +159,8 @@ class AudioPlayActivity :
     }
 
     private fun initView() {
+        binding.ivCover.setDragEnabled(false)
+        binding.ivCover.setAutoHideEnabled(false)
         binding.ivPlayMode.setOnClickListener {
             AudioPlay.changePlayMode()
         }
@@ -220,10 +222,9 @@ class AudioPlayActivity :
     }
 
     private fun upCover(path: String?) {
-        BookCover.load(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl) {
-            BookCover.loadBlur(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl)
-                .into(binding.ivBg)
-        }.into(binding.ivCover)
+        binding.ivCover.setCover(path, AudioPlay.bookSource?.bookSourceUrl)
+        BookCover.loadBlur(this, path, sourceOrigin = AudioPlay.bookSource?.bookSourceUrl)
+            .into(binding.ivBg)
     }
 
     private fun playButton() {
@@ -305,8 +306,10 @@ class AudioPlayActivity :
             AudioPlay.status = it
             if (it == Status.PLAY) {
                 binding.fabPlayStop.setImageResource(R.drawable.ic_pause_24dp)
+                binding.ivCover.setPlaying(true)
             } else {
                 binding.fabPlayStop.setImageResource(R.drawable.ic_play_24dp)
+                binding.ivCover.setPlaying(false)
             }
         }
         observeEventSticky<String>(EventBus.AUDIO_SUB_TITLE) {

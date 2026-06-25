@@ -3,9 +3,13 @@
 package io.legado.app.ui.book.toc
 
 import android.content.Intent
+import android.graphics.Color
+import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
+import android.view.Gravity
 import android.view.Menu
 import android.view.MenuItem
+import android.view.WindowManager
 import androidx.activity.viewModels
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
@@ -13,6 +17,7 @@ import androidx.fragment.app.FragmentPagerAdapter
 import com.google.android.material.tabs.TabLayout
 import io.legado.app.R
 import io.legado.app.base.VMBaseActivity
+import io.legado.app.constant.Theme
 import io.legado.app.data.entities.Book
 import io.legado.app.databinding.ActivityChapterListBinding
 import io.legado.app.help.book.isLocalTxt
@@ -33,7 +38,11 @@ import io.legado.app.utils.visible
 /**
  * 目录
  */
-class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
+class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
+    fullScreen = false,
+    theme = Theme.Transparent,
+    imageBg = false
+),
     TxtTocRuleDialog.CallBack {
 
     override val binding by viewBinding(ActivityChapterListBinding::inflate)
@@ -53,6 +62,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
     }
 
     override fun onActivityCreated(savedInstanceState: Bundle?) {
+        setupBottomSheetWindow()
         tabLayout = binding.titleBar.findViewById(R.id.tab_layout)
         tabLayout.isTabIndicatorFullWidth = false
         tabLayout.setSelectedTabIndicatorColor(accentColor)
@@ -65,6 +75,23 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(),
         intent.getStringExtra("bookUrl")?.let {
             viewModel.initBook(it)
         }
+    }
+
+    private fun setupBottomSheetWindow() {
+        setFinishOnTouchOutside(true)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.attributes = window.attributes.apply {
+            gravity = Gravity.BOTTOM
+            width = WindowManager.LayoutParams.MATCH_PARENT
+            height = resources.displayMetrics.heightPixels * 2 / 3
+            dimAmount = 0f
+            windowAnimations = R.style.Animation_TocBottomSheet
+        }
+        window.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            resources.displayMetrics.heightPixels * 2 / 3
+        )
     }
 
     override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
