@@ -489,6 +489,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
             BookHelp.setRemoveSameTitle(
                 book, textChapter.chapter, !textChapter.sameTitleRemoved
             )
+            ReadBook.clearProcessedContentCache()
             ReadBook.loadContent(ReadBook.durChapterIndex)
         }
     }
@@ -545,6 +546,7 @@ class ReadBookViewModel(application: Application) : BaseViewModel(application) {
         execute {
             ReadBook.book?.let {
                 ContentProcessor.get(it.name, it.origin).upReplaceRules()
+                ReadBook.clearProcessedContentCache()
                 ReadBook.loadContent(resetPageOffset = false)
             }
         }

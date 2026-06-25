@@ -10,6 +10,7 @@ import io.legado.app.data.entities.BookProgress
 import io.legado.app.data.entities.BookSource
 import io.legado.app.data.entities.ReadRecord
 import io.legado.app.help.AppWebDav
+import io.legado.app.help.book.BookContent
 import io.legado.app.help.book.BookHelp
 import io.legado.app.help.book.ContentProcessor
 import io.legado.app.help.book.isImage
@@ -94,6 +95,7 @@ object ReadBook : CoroutineScope by MainScope() {
     val downloadScope = CoroutineScope(SupervisorJob() + IO)
     val preDownloadSemaphore = Semaphore(2)
     val executor = globalExecutor
+    private val processedContentCache = ConcurrentHashMap<ProcessedContentKey, ProcessedContent>()
 
     fun resetData(book: Book) {
         releaseAndCancel()
@@ -123,6 +125,7 @@ object ReadBook : CoroutineScope by MainScope() {
             downloadedChapters.clear()
             downloadFailChapters.clear()
         }
+        processedContentCache.clear()
     }
 
     fun upData(book: Book) {
@@ -537,9 +540,9 @@ object ReadBook : CoroutineScope by MainScope() {
     ) {
         loadContent(durChapterIndex, resetPageOffset = resetPageOffset) {
             success?.invoke()
+            loadContent(durChapterIndex + 1, resetPageOffset = resetPageOffset)
+            loadContent(durChapterIndex - 1, resetPageOffset = resetPageOffset)
         }
-        loadContent(durChapterIndex + 1, resetPageOffset = resetPageOffset)
-        loadContent(durChapterIndex - 1, resetPageOffset = resetPageOffset)
     }
 
     fun loadOrUpContent() {
@@ -590,6 +593,43 @@ object ReadBook : CoroutineScope by MainScope() {
             }
         }.onError {
             AppLog.put("加载正文出错\n${it.localizedMessage}")
+        }
+    }
+
+    fun clearProcessedContentCache() {
+        processedContentCache.clear()
+    }
+
+    private fun getProcessedContent(
+        book: Book,
+        chapter: BookChapter,
+        content: String
+    ): ProcessedContent {
+        val key = ProcessedContentKey(
+            bookUrl = book.bookUrl,
+            chapterUrl = chapter.url,
+            chapterIndex = chapter.index,
+            chapterTitle = chapter.title,
+            contentLength = content.length,
+            contentHash = content.hashCode(),
+            useReplaceRule = book.getUseReplaceRule(),
+            reSegment = book.getReSegment(),
+            chineseConverterType = AppConfig.chineseConverterType
+        )
+        processedContentCache[key]?.let {
+            return it
+        }
+        val contentProcessor = ContentProcessor.get(book.name, book.origin)
+        val displayTitle = chapter.getDisplayTitle(
+            contentProcessor.getTitleReplaceRules(),
+            book.getUseReplaceRule()
+        )
+        val bookContent = contentProcessor.getContent(book, chapter, content, includeTitle = false)
+        return ProcessedContent(displayTitle, bookContent).also {
+            if (processedContentCache.size > 12) {
+                processedContentCache.clear()
+            }
+            processedContentCache[key] = it
         }
     }
 
@@ -703,16 +743,15 @@ object ReadBook : CoroutineScope by MainScope() {
         }
         chapterLoadingJobs[chapter.index]?.cancel()
         val job = Coroutine.async(this, start = CoroutineStart.LAZY) {
-            val contentProcessor = ContentProcessor.get(book.name, book.origin)
-            val displayTitle = chapter.getDisplayTitle(
-                contentProcessor.getTitleReplaceRules(),
-                book.getUseReplaceRule()
-            )
-            val contents = contentProcessor
-                .getContent(book, chapter, content, includeTitle = false)
+            val processedContent = getProcessedContent(book, chapter, content)
             ensureActive()
             val textChapter = ChapterProvider.getTextChapterAsync(
-                this, book, chapter, displayTitle, contents, simulatedChapterSize
+                this,
+                book,
+                chapter,
+                processedContent.displayTitle,
+                processedContent.bookContent,
+                simulatedChapterSize
             )
             when (val offset = chapter.index - durChapterIndex) {
                 0 -> curChapterLoadingLock.withLock {
@@ -791,15 +830,14 @@ object ReadBook : CoroutineScope by MainScope() {
             return
         }
         kotlin.runCatching {
-            val contentProcessor = ContentProcessor.get(book.name, book.origin)
-            val displayTitle = chapter.getDisplayTitle(
-                contentProcessor.getTitleReplaceRules(),
-                book.getUseReplaceRule()
-            )
-            val contents = contentProcessor
-                .getContent(book, chapter, content, includeTitle = false)
+            val processedContent = getProcessedContent(book, chapter, content)
             val textChapter = ChapterProvider.getTextChapterAsync(
-                this@ReadBook, book, chapter, displayTitle, contents, simulatedChapterSize
+                this@ReadBook,
+                book,
+                chapter,
+                processedContent.displayTitle,
+                processedContent.bookContent,
+                simulatedChapterSize
             )
             when (val offset = chapter.index - durChapterIndex) {
                 0 -> {
@@ -1016,10 +1054,28 @@ object ReadBook : CoroutineScope by MainScope() {
         coroutineContext.cancelChildren()
         ImageProvider.clear()
         clearExpiredChapterLoadingJob(true)
+        processedContentCache.clear()
         if (!CacheBookService.isRun) {
             CacheBook.close()
         }
     }
+
+    private data class ProcessedContentKey(
+        val bookUrl: String,
+        val chapterUrl: String,
+        val chapterIndex: Int,
+        val chapterTitle: String,
+        val contentLength: Int,
+        val contentHash: Int,
+        val useReplaceRule: Boolean,
+        val reSegment: Boolean,
+        val chineseConverterType: Int
+    )
+
+    private data class ProcessedContent(
+        val displayTitle: String,
+        val bookContent: BookContent
+    )
 
     interface CallBack : LayoutProgressListener {
         fun upMenuView()

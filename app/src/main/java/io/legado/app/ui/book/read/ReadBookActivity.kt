@@ -528,6 +528,7 @@ class ReadBookActivity : BaseReadBookActivity(),
             R.id.menu_re_segment -> ReadBook.book?.let {
                 it.setReSegment(!it.getReSegment())
                 item.isChecked = it.getReSegment()
+                ReadBook.clearProcessedContentCache()
                 ReadBook.loadContent(false)
             }
 
