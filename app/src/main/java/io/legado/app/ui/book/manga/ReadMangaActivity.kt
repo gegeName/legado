@@ -311,7 +311,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             val nextFinish = data.nextFinish
             resetPreloadCacheIfNeeded(list)
             mAdapter.submitList(list) {
-                if (curFinish && waitingChapterIndex == ReadManga.durChapterIndex) {
+                if (curFinish && waitingChapterIndex != null) {
                     waitingChapterIndex = null
                     unlockEdgeChapterMoveIfReady()
                 }
@@ -986,7 +986,14 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             if (page.index != page.imageCount - 1 || !isPageFullyAtEdge(edgePage, direction)) {
                 false
             } else if (hasLoadedChapterPage(ReadManga.durChapterIndex + 1)) {
-                false
+                val nextChapterIndex = ReadManga.durChapterIndex + 1
+                ReadManga.moveToNextChapter(toFirst = true).also {
+                    if (it) {
+                        lastEdgeScrollDirection = 0
+                        waitingChapterIndex = nextChapterIndex
+                        edgeChapterMoveLocked = true
+                    }
+                }
             } else {
                 val nextChapterIndex = ReadManga.durChapterIndex + 1
                 ReadManga.moveToNextChapter(toFirst = true).also {
@@ -1001,7 +1008,14 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             if (page.index != 0 || !isPageFullyAtEdge(edgePage, direction)) {
                 false
             } else if (hasLoadedChapterPage(ReadManga.durChapterIndex - 1)) {
-                false
+                val prevChapterIndex = ReadManga.durChapterIndex - 1
+                ReadManga.moveToPrevChapter(toLast = true).also {
+                    if (it) {
+                        lastEdgeScrollDirection = 0
+                        waitingChapterIndex = prevChapterIndex
+                        edgeChapterMoveLocked = true
+                    }
+                }
             } else {
                 val prevChapterIndex = ReadManga.durChapterIndex - 1
                 ReadManga.moveToPrevChapter(toLast = true).also {

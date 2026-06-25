@@ -59,6 +59,7 @@ object ReadManga : CoroutineScope by MainScope() {
     private val loadingChapters = arrayListOf<Int>()
     private val cachingImageJobs = hashMapOf<Int, Job>()
     private var lastClearImageCacheChapterIndex = Int.MIN_VALUE
+    private var chapterMoveDirection = 0
     var simulatedChapterSize = 0
     var mCallback: Callback? = null
     var preDownloadTask: Job? = null
@@ -219,6 +220,7 @@ object ReadManga : CoroutineScope by MainScope() {
     }
 
     fun loadContent() {
+        chapterMoveDirection = 0
         clearMangaChapter()
         preDownloadTask?.cancel()
         preDownloadTask = null
@@ -282,16 +284,22 @@ object ReadManga : CoroutineScope by MainScope() {
         when (val offset = chapter.index - durChapterIndex) {
             0 -> {
                 if (content == null) {
-                    mCallback?.loadFail(errorMsg)
+                    if (!skipUnreadableCurrentChapter()) {
+                        mCallback?.loadFail(errorMsg)
+                    }
                     return
                 }
                 if (content.isEmpty() && !chapter.isVolume) {
-                    mCallback?.loadFail("正文内容为空")
+                    if (!skipUnreadableCurrentChapter()) {
+                        mCallback?.loadFail("正文内容为空")
+                    }
                     return
                 }
                 val mangaChapter = getManageChapter(chapter, content)
                 if (mangaChapter.imageCount == 0 && !chapter.isVolume) {
-                    mCallback?.loadFail("正文没有图片")
+                    if (!skipUnreadableCurrentChapter()) {
+                        mCallback?.loadFail("正文没有图片")
+                    }
                     return
                 }
                 curMangaChapter = mangaChapter
@@ -351,6 +359,7 @@ object ReadManga : CoroutineScope by MainScope() {
      */
     fun moveToNextChapter(toFirst: Boolean = false): Boolean {
         if (durChapterIndex < simulatedChapterSize - 1) {
+            chapterMoveDirection = 1
             if (toFirst) {
                 durChapterPos = 0
             }
@@ -358,6 +367,9 @@ object ReadManga : CoroutineScope by MainScope() {
             prevMangaChapter = curMangaChapter
             curMangaChapter = nextMangaChapter
             nextMangaChapter = null
+            if (curMangaChapter?.imageCount == 0 && curMangaChapter?.chapter?.isVolume == true) {
+                return moveToNextChapter(toFirst = true)
+            }
             cancelStaleImageCacheJobs()
             clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
@@ -379,6 +391,7 @@ object ReadManga : CoroutineScope by MainScope() {
 
     fun moveToPrevChapter(toFirst: Boolean = false, toLast: Boolean = false): Boolean {
         if (durChapterIndex > 0) {
+            chapterMoveDirection = -1
             if (toFirst) {
                 durChapterPos = 0
             }
@@ -390,6 +403,9 @@ object ReadManga : CoroutineScope by MainScope() {
             nextMangaChapter = curMangaChapter
             curMangaChapter = prevMangaChapter
             prevMangaChapter = null
+            if (curMangaChapter?.imageCount == 0 && curMangaChapter?.chapter?.isVolume == true) {
+                return moveToPrevChapter(toLast = true)
+            }
             cancelStaleImageCacheJobs()
             clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
@@ -402,6 +418,17 @@ object ReadManga : CoroutineScope by MainScope() {
             return true
         }
         return false
+    }
+
+    private fun skipUnreadableCurrentChapter(): Boolean {
+        return when {
+            chapterMoveDirection < 0 && durChapterIndex > 0 -> moveToPrevChapter(toLast = true)
+            chapterMoveDirection > 0 && durChapterIndex < simulatedChapterSize - 1 ->
+                moveToNextChapter(toFirst = true)
+            durChapterIndex < simulatedChapterSize - 1 -> moveToNextChapter(toFirst = true)
+            durChapterIndex > 0 -> moveToPrevChapter(toLast = true)
+            else -> false
+        }
     }
 
     fun curPageChanged() {
