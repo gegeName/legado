@@ -89,6 +89,7 @@ object AudioPlay : CoroutineScope by MainScope() {
             book.durChapterPos = durChapterPos
         }
         AudioPlay.book = book
+        bookSource = book.getBookSource()
         chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
         simulatedChapterSize = if (book.readSimulating()) {
             book.simulatedTotalChapterNum()

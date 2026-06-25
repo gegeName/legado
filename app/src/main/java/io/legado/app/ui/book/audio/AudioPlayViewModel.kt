@@ -14,6 +14,7 @@ import io.legado.app.data.entities.BookChapter
 import io.legado.app.data.entities.BookSource
 import io.legado.app.help.book.getBookSource
 import io.legado.app.help.book.removeType
+import io.legado.app.help.book.readSimulating
 import io.legado.app.help.book.simulatedTotalChapterNum
 import io.legado.app.model.AudioPlay
 import io.legado.app.model.webBook.WebBook
@@ -32,9 +33,18 @@ class AudioPlayViewModel(application: Application) : BaseViewModel(application) 
             && currentBook != null
             && (intentBookUrl.isNullOrBlank() || intentBookUrl == currentBook.bookUrl)
         ) {
+            val book = appDb.bookDao.getBook(currentBook.bookUrl) ?: currentBook
             AudioPlay.inBookshelf = intent.getBooleanExtra("inBookshelf", AudioPlay.inBookshelf)
-            titleData.postValue(currentBook.name)
-            coverData.postValue(currentBook.getDisplayCover())
+            AudioPlay.book = book
+            AudioPlay.bookSource = book.getBookSource()
+            AudioPlay.chapterSize = appDb.bookChapterDao.getChapterCount(book.bookUrl)
+            AudioPlay.simulatedChapterSize = if (book.readSimulating()) {
+                book.simulatedTotalChapterNum()
+            } else {
+                AudioPlay.chapterSize
+            }
+            titleData.postValue(book.name)
+            coverData.postValue(book.getDisplayCover())
             AudioPlay.upDurChapter()
             return
         }
