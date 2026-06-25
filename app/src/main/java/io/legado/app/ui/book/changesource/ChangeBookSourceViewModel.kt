@@ -148,13 +148,19 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
         }
 
         applyOriginSearchGroup()
-        getDbSearchBooks().let {
-            replaceSearchBooks(it)
-            sendAdapterUpdate(true)
-        }
+        val sourceParts = getCurrentBookSourceParts()
+        val dbSearchBooks = getDbSearchBooks()
+        replaceSearchBooks(dbSearchBooks)
+        sendAdapterUpdate(true)
 
-        if (isSearchBooksEmpty()) {
+        if (dbSearchBooks.isEmpty()) {
             startSearch()
+        } else {
+            val cachedOrigins = dbSearchBooks.asSequence().map { it.origin }.toHashSet()
+            val missingSourceParts = sourceParts.filterNot { it.bookSourceUrl in cachedOrigins }
+            if (missingSourceParts.isNotEmpty()) {
+                startSearchMissing(missingSourceParts)
+            }
         }
 
         awaitClose {
@@ -293,23 +299,23 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
             bookMap.clear()
             tocMapChapterCount = 0
             _changeSourceProgress.value = 0 to ""
-            val searchGroup = AppConfig.searchGroup
-            val sourceType = currentSearchSourceType()
-            if (sourceType != null) {
-                bookSourceParts.addAll(appDb.bookSourceDao.getEnabledPartByType(sourceType))
-            } else if (searchGroup.isBlank()) {
-                bookSourceParts.addAll(appDb.bookSourceDao.allEnabledPart)
-            } else {
-                val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
-                if (sources.isEmpty()) {
-                    AppConfig.searchGroup = ""
-                    bookSourceParts.addAll(appDb.bookSourceDao.allEnabledPart)
-                } else {
-                    bookSourceParts.addAll(sources)
-                }
-            }
+            bookSourceParts.addAll(getCurrentBookSourceParts())
             initSearchPool()
             search(nextSearchGeneration(), bookSourceParts.toList())
+        }
+    }
+
+    private fun startSearchMissing(sourceParts: List<BookSourcePart>) {
+        execute {
+            stopSearch()
+            bookSourceParts.clear()
+            tocMap.clear()
+            bookMap.clear()
+            tocMapChapterCount = 0
+            _changeSourceProgress.value = 0 to ""
+            bookSourceParts.addAll(sourceParts)
+            initSearchPool()
+            search(nextSearchGeneration(), sourceParts)
         }
     }
 
@@ -569,6 +575,24 @@ open class ChangeBookSourceViewModel(application: Application) : BaseViewModel(a
                 appDb.searchBookDao.changeSourceByType(name, "", sourceType)
             } else {
                 appDb.searchBookDao.changeSourceByGroup(name, "", AppConfig.searchGroup)
+            }
+        }
+    }
+
+    private fun getCurrentBookSourceParts(): List<BookSourcePart> {
+        val searchGroup = AppConfig.searchGroup
+        val sourceType = currentSearchSourceType()
+        return if (sourceType != null) {
+            appDb.bookSourceDao.getEnabledPartByType(sourceType)
+        } else if (searchGroup.isBlank()) {
+            appDb.bookSourceDao.allEnabledPart
+        } else {
+            val sources = appDb.bookSourceDao.getEnabledPartByGroup(searchGroup)
+            if (sources.isEmpty()) {
+                AppConfig.searchGroup = ""
+                appDb.bookSourceDao.allEnabledPart
+            } else {
+                sources
             }
         }
     }
