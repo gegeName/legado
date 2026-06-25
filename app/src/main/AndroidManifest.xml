@@ -241,7 +241,8 @@
         <!-- 目录 -->
         <activity
             android:name=".ui.book.toc.TocActivity"
-            android:launchMode="singleTop" />
+            android:launchMode="singleTop"
+            android:theme="@style/AppTheme.TocBottomSheet" />
         <!-- 正文搜索 -->
         <activity
             android:name=".ui.book.searchContent.SearchContentActivity"

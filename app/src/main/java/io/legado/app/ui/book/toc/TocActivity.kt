@@ -7,10 +7,11 @@ import android.graphics.Color
 import android.graphics.drawable.ColorDrawable
 import android.os.Bundle
 import android.view.Gravity
-import android.view.Menu
 import android.view.MenuItem
+import android.view.View
 import android.view.WindowManager
 import androidx.activity.viewModels
+import androidx.appcompat.widget.PopupMenu
 import androidx.appcompat.widget.SearchView
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.FragmentPagerAdapter
@@ -23,13 +24,13 @@ import io.legado.app.databinding.ActivityChapterListBinding
 import io.legado.app.help.book.isLocalTxt
 import io.legado.app.help.config.AppConfig
 import io.legado.app.lib.theme.accentColor
-import io.legado.app.lib.theme.primaryTextColor
 import io.legado.app.model.ReadBook
 import io.legado.app.ui.about.AppLogDialog
 import io.legado.app.ui.book.toc.rule.TxtTocRuleDialog
 import io.legado.app.ui.file.HandleFileContract
 import io.legado.app.ui.widget.dialog.WaitDialog
 import io.legado.app.utils.applyTint
+import io.legado.app.utils.getCompatColor
 import io.legado.app.utils.gone
 import io.legado.app.utils.showDialogFragment
 import io.legado.app.utils.viewbindingdelegate.viewBinding
@@ -43,14 +44,15 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
     theme = Theme.Transparent,
     imageBg = false
 ),
-    TxtTocRuleDialog.CallBack {
+    TxtTocRuleDialog.CallBack,
+    PopupMenu.OnMenuItemClickListener {
 
     override val binding by viewBinding(ActivityChapterListBinding::inflate)
     override val viewModel by viewModels<TocViewModel>()
+    override val showMiniAudioPlayer: Boolean = false
 
     private lateinit var tabLayout: TabLayout
-    private var menu: Menu? = null
-    private var searchView: SearchView? = null
+    private lateinit var searchView: SearchView
     private val waitDialog by lazy { WaitDialog(this) }
     private val exportDir = registerForActivityResult(HandleFileContract()) {
         it.uri?.let { uri ->
@@ -61,49 +63,49 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
         }
     }
 
+    private val tocContentColor: Int
+        get() = getCompatColor(R.color.primaryText)
+
+    override fun initTheme() {
+        setTheme(R.style.AppTheme_TocBottomSheet)
+    }
+
     override fun onActivityCreated(savedInstanceState: Bundle?) {
         setupBottomSheetWindow()
-        tabLayout = binding.titleBar.findViewById(R.id.tab_layout)
-        tabLayout.isTabIndicatorFullWidth = false
-        tabLayout.setSelectedTabIndicatorColor(accentColor)
+        tabLayout = binding.tabLayout
+        searchView = binding.searchView
+        setupHeader()
         binding.viewPager.adapter = TabFragmentPageAdapter()
         tabLayout.setupWithViewPager(binding.viewPager)
         tabLayout.tabGravity = TabLayout.GRAVITY_CENTER
-        viewModel.bookData.observe(this) {
-            menu?.setGroupVisible(R.id.menu_group_text, it.isLocalTxt)
-        }
+        tabLayout.isTabIndicatorFullWidth = false
+        tabLayout.setSelectedTabIndicatorColor(accentColor)
+        tabLayout.setTabTextColors(tocContentColor, accentColor)
         intent.getStringExtra("bookUrl")?.let {
             viewModel.initBook(it)
         }
     }
 
-    private fun setupBottomSheetWindow() {
-        setFinishOnTouchOutside(true)
-        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
-        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
-        window.attributes = window.attributes.apply {
-            gravity = Gravity.BOTTOM
-            width = WindowManager.LayoutParams.MATCH_PARENT
-            height = resources.displayMetrics.heightPixels * 2 / 3
-            dimAmount = 0f
-            windowAnimations = R.style.Animation_TocBottomSheet
+    private fun setupHeader() {
+        binding.btnClose.applyTint(tocContentColor)
+        binding.btnSearch.applyTint(tocContentColor)
+        binding.btnMore.applyTint(tocContentColor)
+        binding.btnClose.setOnClickListener { finish() }
+        binding.btnSearch.setOnClickListener {
+            searchView.visible(true)
+            tabLayout.gone()
+            searchView.isIconified = false
+            searchView.requestFocus()
+            searchView.post { searchView.setQuery("", false) }
         }
-        window.setLayout(
-            WindowManager.LayoutParams.MATCH_PARENT,
-            resources.displayMetrics.heightPixels * 2 / 3
-        )
-    }
-
-    override fun onCompatCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.book_toc, menu)
-        this.menu = menu
-        val search = menu.findItem(R.id.menu_search)
-        searchView = (search.actionView as SearchView).apply {
-            applyTint(primaryTextColor)
+        binding.btnMore.setOnClickListener { showTocMenu(it) }
+        searchView.apply {
+            applyTint(tocContentColor)
             maxWidth = resources.displayMetrics.widthPixels
             onActionViewCollapsed()
             setOnCloseListener {
                 tabLayout.visible()
+                binding.searchView.gone()
                 false
             }
             setOnSearchClickListener { tabLayout.gone() }
@@ -125,33 +127,64 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
             })
             setOnQueryTextFocusChangeListener { _, hasFocus ->
                 if (!hasFocus) {
-                    searchView?.isIconified = true
+                    binding.searchView.gone()
+                    tabLayout.visible()
+                    isIconified = true
                 }
             }
         }
-        return super.onCompatCreateOptionsMenu(menu)
+        binding.searchView.gone()
     }
 
-    override fun onMenuOpened(featureId: Int, menu: Menu): Boolean {
-        if (tabLayout.selectedTabPosition == 1) {
-            menu.setGroupVisible(R.id.menu_group_bookmark, true)
-            menu.setGroupVisible(R.id.menu_group_toc, false)
-            menu.setGroupVisible(R.id.menu_group_text, false)
-        } else {
-            menu.setGroupVisible(R.id.menu_group_bookmark, false)
-            menu.setGroupVisible(R.id.menu_group_toc, true)
-            menu.setGroupVisible(R.id.menu_group_text, viewModel.bookData.value?.isLocalTxt == true)
+    private fun setupBottomSheetWindow() {
+        setFinishOnTouchOutside(true)
+        window.setBackgroundDrawable(ColorDrawable(Color.TRANSPARENT))
+        window.decorView.setBackgroundColor(Color.TRANSPARENT)
+        window.clearFlags(WindowManager.LayoutParams.FLAG_DIM_BEHIND)
+        window.attributes = window.attributes.apply {
+            gravity = Gravity.TOP
+            width = WindowManager.LayoutParams.MATCH_PARENT
+            height = WindowManager.LayoutParams.MATCH_PARENT
+            dimAmount = 0f
+            windowAnimations = R.style.Animation_TocBottomSheet
         }
-        menu.findItem(R.id.menu_use_replace)?.isChecked =
-            AppConfig.tocUiUseReplace
-        menu.findItem(R.id.menu_load_word_count)?.isChecked =
-            AppConfig.tocCountWords
-        menu.findItem(R.id.menu_split_long_chapter)?.isChecked =
-            viewModel.bookData.value?.getSplitLongChapter() == true
-        return super.onMenuOpened(featureId, menu)
+        window.setLayout(
+            WindowManager.LayoutParams.MATCH_PARENT,
+            WindowManager.LayoutParams.MATCH_PARENT
+        )
+        binding.root.setBackgroundColor(Color.TRANSPARENT)
+        binding.root.setOnClickListener { finish() }
+        binding.tocPanel.setOnClickListener { }
+        binding.tocPanel.layoutParams = binding.tocPanel.layoutParams.apply {
+            height = resources.displayMetrics.heightPixels * 2 / 3
+        }
     }
 
-    override fun onCompatOptionsItemSelected(item: MenuItem): Boolean {
+    private fun showTocMenu(anchor: View) {
+        val popupMenu = PopupMenu(this, anchor)
+        popupMenu.menuInflater.inflate(R.menu.book_toc, popupMenu.menu)
+        popupMenu.setOnMenuItemClickListener(this)
+        popupMenu.menu.removeItem(R.id.menu_search)
+        popupMenu.menu.setGroupVisible(R.id.menu_group_text, viewModel.bookData.value?.isLocalTxt == true)
+        if (tabLayout.selectedTabPosition == 1) {
+            popupMenu.menu.setGroupVisible(R.id.menu_group_bookmark, true)
+            popupMenu.menu.setGroupVisible(R.id.menu_group_toc, false)
+            popupMenu.menu.setGroupVisible(R.id.menu_group_text, false)
+        } else {
+            popupMenu.menu.setGroupVisible(R.id.menu_group_bookmark, false)
+            popupMenu.menu.setGroupVisible(R.id.menu_group_toc, true)
+            popupMenu.menu.setGroupVisible(R.id.menu_group_text, viewModel.bookData.value?.isLocalTxt == true)
+        }
+        popupMenu.menu.findItem(R.id.menu_use_replace)?.isChecked =
+            AppConfig.tocUiUseReplace
+        popupMenu.menu.findItem(R.id.menu_load_word_count)?.isChecked =
+            AppConfig.tocCountWords
+        popupMenu.menu.findItem(R.id.menu_split_long_chapter)?.isChecked =
+            viewModel.bookData.value?.getSplitLongChapter() == true
+        popupMenu.show()
+    }
+
+    override fun onMenuItemClick(item: MenuItem): Boolean {
         when (item.itemId) {
             R.id.menu_toc_regex -> showDialogFragment(
                 TxtTocRuleDialog(viewModel.bookData.value?.tocUrl)
@@ -166,7 +199,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
             }
 
             R.id.menu_reverse_toc -> viewModel.reverseToc {
-                viewModel.chapterListCallBack?.upChapterList(searchView?.query?.toString())
+                viewModel.chapterListCallBack?.upChapterList(searchView.query?.toString())
                 setResult(RESULT_OK, Intent().apply {
                     putExtra("index", it.durChapterIndex)
                     putExtra("chapterPos", 0)
@@ -176,7 +209,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
             R.id.menu_use_replace -> {
                 AppConfig.tocUiUseReplace = !item.isChecked
                 viewModel.chapterListCallBack?.clearDisplayTitle()
-                viewModel.chapterListCallBack?.upChapterList(searchView?.query?.toString())
+                viewModel.chapterListCallBack?.upChapterList(searchView.query?.toString())
             }
 
             R.id.menu_load_word_count -> {
@@ -194,7 +227,7 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
 
             R.id.menu_log -> showDialogFragment<AppLogDialog>()
         }
-        return super.onCompatOptionsItemSelected(item)
+        return true
     }
 
     override fun onTocRegexDialogResult(tocRegex: String) {
@@ -239,7 +272,5 @@ class TocActivity : VMBaseActivity<ActivityChapterListBinding, TocViewModel>(
                 else -> getString(R.string.chapter_list)
             }
         }
-
     }
-
 }

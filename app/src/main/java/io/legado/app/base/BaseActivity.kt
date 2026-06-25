@@ -61,6 +61,7 @@ abstract class BaseActivity<VB : ViewBinding>(
 ) : AppCompatActivity() {
 
     protected abstract val binding: VB
+    protected open val showMiniAudioPlayer: Boolean = true
     private var miniAudioPlayerView: MiniAudioPlayerView? = null
     private var miniAudioLastClickTime = 0L
     private val miniAudioSingleClickRunnable = Runnable { toggleMiniAudioPlayState() }
@@ -237,6 +238,7 @@ abstract class BaseActivity<VB : ViewBinding>(
 
     private fun updateMiniAudioPlayer() {
         if (
+            !showMiniAudioPlayer ||
             this is AudioPlayActivity ||
             !AudioPlayService.isRun ||
             AudioPlay.book == null ||
