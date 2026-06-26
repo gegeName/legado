@@ -311,7 +311,15 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             val nextFinish = data.nextFinish
             resetPreloadCacheIfNeeded(list)
             mAdapter.submitList(list) {
-                if (curFinish && waitingChapterIndex != null) {
+                val pendingChapterIndex = waitingChapterIndex
+                if (curFinish && pendingChapterIndex != null) {
+                    binding.recyclerView.stopScroll()
+                    mLayoutManager.scrollToPositionWithOffset(pos, 0)
+                    val centerItem = list.getOrNull(pos)
+                    if (centerItem is MangaPage) {
+                        binding.mangaMenu.upSeekBar(centerItem.index, centerItem.imageCount)
+                        upInfoBar(centerItem)
+                    }
                     waitingChapterIndex = null
                     unlockEdgeChapterMoveIfReady()
                 }
@@ -536,6 +544,7 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 binding.tvRetry.isVisible = retry
                 binding.tvMsg.text = msg
             } else {
+                loadMoreView.visible()
                 loadMoreView.error(null, "加载失败，点击重试")
                 refreshLoadMoreFooter()
             }
@@ -977,6 +986,15 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         if (direction == 0) {
             return false
         }
+        if (!AppConfig.enableMangaHorizontalScroll) {
+            val adjacentChapterIndex = ReadManga.durChapterIndex + direction
+            val adjacentLoaded = mAdapter.getItems().any {
+                it is MangaPage && it.chapterIndex == adjacentChapterIndex
+            }
+            if (adjacentLoaded) {
+                return false
+            }
+        }
         val edgePage = findCurrentChapterEdgePage(direction) ?: return false
         val page = edgePage.page
         if (page.chapterIndex != ReadManga.durChapterIndex || page.imageCount <= 0) {
@@ -985,15 +1003,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         return if (direction > 0) {
             if (page.index != page.imageCount - 1 || !isPageFullyAtEdge(edgePage, direction)) {
                 false
-            } else if (hasLoadedChapterPage(ReadManga.durChapterIndex + 1)) {
-                val nextChapterIndex = ReadManga.durChapterIndex + 1
-                ReadManga.moveToNextChapter(toFirst = true).also {
-                    if (it) {
-                        lastEdgeScrollDirection = 0
-                        waitingChapterIndex = nextChapterIndex
-                        edgeChapterMoveLocked = true
-                    }
-                }
             } else {
                 val nextChapterIndex = ReadManga.durChapterIndex + 1
                 ReadManga.moveToNextChapter(toFirst = true).also {
@@ -1007,15 +1016,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         } else {
             if (page.index != 0 || !isPageFullyAtEdge(edgePage, direction)) {
                 false
-            } else if (hasLoadedChapterPage(ReadManga.durChapterIndex - 1)) {
-                val prevChapterIndex = ReadManga.durChapterIndex - 1
-                ReadManga.moveToPrevChapter(toLast = true).also {
-                    if (it) {
-                        lastEdgeScrollDirection = 0
-                        waitingChapterIndex = prevChapterIndex
-                        edgeChapterMoveLocked = true
-                    }
-                }
             } else {
                 val prevChapterIndex = ReadManga.durChapterIndex - 1
                 ReadManga.moveToPrevChapter(toLast = true).also {
@@ -1066,12 +1066,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
             }
         }
         return null
-    }
-
-    private fun hasLoadedChapterPage(chapterIndex: Int): Boolean {
-        return mAdapter.getItems().any {
-            it is MangaPage && it.chapterIndex == chapterIndex
-        }
     }
 
     private fun isPageFullyAtEdge(edgePage: EdgeMangaPage, direction: Int): Boolean {

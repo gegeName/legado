@@ -284,9 +284,7 @@ object ReadManga : CoroutineScope by MainScope() {
         when (val offset = chapter.index - durChapterIndex) {
             0 -> {
                 if (content == null) {
-                    if (!skipUnreadableCurrentChapter()) {
-                        mCallback?.loadFail(errorMsg)
-                    }
+                    mCallback?.loadFail(errorMsg)
                     return
                 }
                 if (content.isEmpty() && !chapter.isVolume) {
@@ -409,6 +407,7 @@ object ReadManga : CoroutineScope by MainScope() {
             cancelStaleImageCacheJobs()
             clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
+                mCallback?.startLoad()
                 loadContent(durChapterIndex)
             } else {
                 mCallback?.upContent()
