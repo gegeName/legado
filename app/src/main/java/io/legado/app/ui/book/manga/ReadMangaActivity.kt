@@ -242,8 +242,8 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
                 }
 
                 override fun onScrolled(recyclerView: RecyclerView, dx: Int, dy: Int) {
-                    val direction = scrollDirection(dx, dy)
-                    preloadOnScroll(direction)
+                    val delta = if (AppConfig.enableMangaHorizontalScroll) dx else dy
+                    preloadOnScroll(delta.compareTo(0))
                 }
             })
         }
@@ -905,14 +905,6 @@ class ReadMangaActivity : VMBaseActivity<ActivityMangaBinding, ReadMangaViewMode
         } else {
             binding.recyclerView.smoothScrollBy(dx, dy)
         }
-    }
-
-    private fun scrollDirection(dx: Int, dy: Int): Int {
-        return if (AppConfig.enableMangaHorizontalScroll) {
-            dx
-        } else {
-            dy
-        }.compareTo(0)
     }
 
     private fun showNumberPickerDialog(
