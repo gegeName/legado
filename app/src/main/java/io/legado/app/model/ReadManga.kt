@@ -355,7 +355,7 @@ object ReadManga : CoroutineScope by MainScope() {
     /**
      * 加载下一章
      */
-    fun moveToNextChapter(toFirst: Boolean = false): Boolean {
+    fun moveToNextChapter(toFirst: Boolean = false, silent: Boolean = false): Boolean {
         if (durChapterIndex < simulatedChapterSize - 1) {
             chapterMoveDirection = 1
             if (toFirst) {
@@ -366,19 +366,18 @@ object ReadManga : CoroutineScope by MainScope() {
             curMangaChapter = nextMangaChapter
             nextMangaChapter = null
             if (curMangaChapter?.imageCount == 0 && curMangaChapter?.chapter?.isVolume == true) {
-                return moveToNextChapter(toFirst = true)
+                return moveToNextChapter(toFirst = true, silent = silent)
             }
             cancelStaleImageCacheJobs()
             clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
                 mCallback?.startLoad()
                 loadContent(durChapterIndex)
-            } else {
+            } else if (!silent) {
                 mCallback?.upContent()
             }
             loadContent(durChapterIndex + 1)
             saveRead()
-            AppLog.putDebug("moveToNextChapter-curPageChanged()")
             curPageChanged()
             return true
         } else {
@@ -387,7 +386,11 @@ object ReadManga : CoroutineScope by MainScope() {
         }
     }
 
-    fun moveToPrevChapter(toFirst: Boolean = false, toLast: Boolean = false): Boolean {
+    fun moveToPrevChapter(
+        toFirst: Boolean = false,
+        toLast: Boolean = false,
+        silent: Boolean = false
+    ): Boolean {
         if (durChapterIndex > 0) {
             chapterMoveDirection = -1
             if (toFirst) {
@@ -402,18 +405,19 @@ object ReadManga : CoroutineScope by MainScope() {
             curMangaChapter = prevMangaChapter
             prevMangaChapter = null
             if (curMangaChapter?.imageCount == 0 && curMangaChapter?.chapter?.isVolume == true) {
-                return moveToPrevChapter(toLast = true)
+                return moveToPrevChapter(toLast = true, silent = silent)
             }
             cancelStaleImageCacheJobs()
             clearExpiredImageCacheIfNeeded()
             if (curMangaChapter == null) {
                 mCallback?.startLoad()
                 loadContent(durChapterIndex)
-            } else {
+            } else if (!silent) {
                 mCallback?.upContent()
             }
             loadContent(durChapterIndex - 1)
             saveRead()
+            curPageChanged()
             return true
         }
         return false
